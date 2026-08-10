@@ -38,38 +38,6 @@ def load_data():
     df = df.dropna(subset=['위도', '경도'])
     return df
 
-# 지역별 핀 색상 매핑 함수 (참고 지도 색상 반영)
-def get_region_color(region):
-    region_str = str(region)
-    if any(k in region_str for k in ['서울', '수도권', '경기', '인천']):
-        return '#2563EB'  # 파란색 (수도권)
-    elif '강원' in region_str:
-        return '#1E40AF'  # 남색 (강원)
-    elif any(k in region_str for k in ['충청', '충북', '충남', '대전', '세종']):
-        return '#65A30D'  # 연두색 (충청)
-    elif any(k in region_str for k in ['전라', '전북', '전남', '광주']):
-        return '#EA580C'  # 주황/다홍색 (전라)
-    elif any(k in region_str for k in ['경상', '경북', '경남', '대구', '부산', '울산']):
-        return '#0284C7'  # 밝은 하늘색 (경상)
-    elif '제주' in region_str:
-        return '#CA8A04'  # 노란색 (제주)
-    else:
-        return '#4B5563'  # 기타 회색
-
-# 첨부해주신 이미지 스타일의 물방울 SVG 핀 생성
-def create_custom_pin_icon(color_hex):
-    svg_code = f"""
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 140" width="30" height="42">
-        <path d="M50 0 C22.4 0 0 22.4 0 50 C0 85 50 140 50 140 C50 140 100 85 100 50 C100 22.4 77.6 0 50 0 Z" fill="{color_hex}"/>
-        <circle cx="50" cy="48" r="22" fill="#FFFFFF"/>
-    </svg>
-    """
-    return folium.DivIcon(
-        html=f'<div style="transform: translate(-50%, -100%);">{svg_code}</div>',
-        icon_size=(30, 42),
-        icon_anchor=(15, 42)
-    )
-
 try:
     df = load_data()
 
@@ -92,13 +60,13 @@ try:
 
     st.sidebar.metric("대리점 수", f"{len(filtered_df)} 개")
 
-    # 지도 위치 설정 (대한민국 한반도 중심 고정)
-    if selected_region == "전체" or filtered_df.empty:
-        center_lat, center_lng, zoom_level = 35.8, 127.8, 7
-    else:
+    # 지도 위치 설정
+    if not filtered_df.empty:
         center_lat = filtered_df['위도'].mean()
         center_lng = filtered_df['경도'].mean()
-        zoom_level = 10
+        zoom_level = 7 if selected_region == "전체" else 10
+    else:
+        center_lat, center_lng, zoom_level = 36.5, 127.5, 7
 
     # 🎨 지도 디자인: 단색/회색조의 차분한 백그라운드 타일 (CartoDB positron)
     m = folium.Map(
@@ -107,28 +75,23 @@ try:
         tiles="CartoDB positron"
     )
 
-    # 📌 핀 디자인: 물방울 형태의 권역별 색상 커스텀 마커
+    # 📌 핀 디자인: 심플한 검은색 슬림 마커
     for _, row in filtered_df.iterrows():
         store_name = row.get('대리점명', '대리점')
         store_addr = row.get('주소', '')
-        store_region = row.get('지역', '')
-        
-        pin_color = get_region_color(store_region)
-        pin_icon = create_custom_pin_icon(pin_color)
         
         popup_html = f"""
-        <div style="font-family: sans-serif; padding: 5px; width: 180px;">
+        <div style="font-family: sans-serif; padding: 5px;">
             <div style="font-size: 14px; font-weight: bold; margin-bottom: 4px;">{store_name}</div>
-            <div style="font-size: 12px; color: #555; line-height: 1.3;">{store_addr}</div>
-            <div style="font-size: 11px; color: {pin_color}; font-weight: bold; margin-top: 5px;">{store_region}</div>
+            <div style="font-size: 12px; color: #555;">{store_addr}</div>
         </div>
         """
         
         folium.Marker(
             location=[row['위도'], row['경도']],
-            popup=folium.Popup(popup_html, max_width=250),
-            tooltip=f"{store_name} ({store_region})" if store_region else store_name,
-            icon=pin_icon
+            popup=folium.Popup(popup_html, max_width=280),
+            tooltip=store_name,
+            icon=folium.Icon(color='black', icon='map-pin', prefix='fa')
         ).add_to(m)
 
     # 지도 출력
