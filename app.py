@@ -22,7 +22,7 @@ if df_raw is not None:
     # 컬럼명의 앞뒤 공백 제거
     df_raw.columns = df_raw.columns.str.strip()
 
-    # '위도'와 '경도'열을 강제로 실수(Float) 숫자로 변환
+    # '위도'와 '경도'열을 실수(Float) 숫자로 변환
     df = df_raw.copy()
     df['lat'] = pd.to_numeric(df['위도'].astype(str).str.replace(',', ''), errors='coerce')
     df['lon'] = pd.to_numeric(df['경도'].astype(str).str.replace(',', ''), errors='coerce')
@@ -73,14 +73,11 @@ if df_raw is not None:
         mid_lat = df_display['lat'].mean()
         mid_lon = df_display['lon'].mean()
 
-        # 초기 줌 레벨 설정 및 축소 제한(min_zoom)
-        initial_zoom = 8.5
+        # 기본 뷰 설정 (축소 제한 옵션 제거하여 오류 방지)
         view_state = pdk.ViewState(
             latitude=mid_lat if not pd.isna(mid_lat) else 37.5,
             longitude=mid_lon if not pd.isna(mid_lon) else 127.0,
-            zoom=initial_zoom,
-            min_zoom=initial_zoom,  # 초기 화면보다 더 축소(Zoom-out)되지 않도록 제한
-            max_zoom=16,            # 확대(Zoom-in)는 가능
+            zoom=8.5,
             pitch=0,
         )
 
