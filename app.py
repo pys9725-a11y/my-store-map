@@ -94,7 +94,7 @@ if df_raw is not None:
             auto_highlight=True,  # 마우스 오버 시 강조
         )
 
-        # 라이트 모드에 맞춘 깔끔한 카드형 팝업 툴팁
+        # 라이트 모드 카드형 팝업 툴팁 (오류 수정 완료)
         tooltip = {
             "html": "<div style='font-family: sans-serif; line-height: 1.5;'>"
                     "<b style='font-size: 14px; color: #1E293B;'>{대리점명}</b><hr style='margin: 4px 0; border: 0.5px solid #E2E8F0;'/>"
@@ -104,7 +104,7 @@ if df_raw is not None:
                     "</div>",
             "style": {
                 "backgroundColor": "#FFFFFF",
-                "color": #334155,
+                "color": "#334155",
                 "fontSize": "12px",
                 "padding": "10px 14px",
                 "borderRadius": "8px",
