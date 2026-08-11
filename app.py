@@ -94,13 +94,13 @@ if df_raw is not None:
             auto_highlight=True,  # 마우스 오버 시 강조
         )
 
-        # 라이트 모드 카드형 팝업 툴팁 (오류 수정 완료)
+        # 팝업 툴팁 (대표자명 옆 전화번호 반영)
         tooltip = {
             "html": "<div style='font-family: sans-serif; line-height: 1.5;'>"
                     "<b style='font-size: 14px; color: #1E293B;'>{대리점명}</b><hr style='margin: 4px 0; border: 0.5px solid #E2E8F0;'/>"
                     "<b>부서:</b> {부서}<br/>"
                     "<b>주소:</b> {주소}<br/>"
-                    "<b>대표자:</b> {대표자명}"
+                    "<b>대표자:</b> {대표자명} ({전화번호})"
                     "</div>",
             "style": {
                 "backgroundColor": "#FFFFFF",
