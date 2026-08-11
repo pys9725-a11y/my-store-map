@@ -1,16 +1,23 @@
 import streamlit as st
 import pandas as pd
-from geopy.geocoders import Nominatim
-from geopy.extra.rate_limiter import RateLimiter
+import requests
 
 # 1. 페이지 설정
 st.set_page_config(page_title="대리점 위치 지도 시각화", layout="wide")
-st.title("📍 구글 시트 기반 대리점 위치 지도 시각화")
+st.title("📍 카카오 API 기반 대리점 지도 시각화")
 
-# 2. 구글 시트 데이터 불러오기
+# 2. API 키 및 구글 시트 URL 설정
+# Streamlit Secrets에서 카카오 API 키 가져오기
+try:
+    KAKAO_API_KEY = st.secrets["KAKAO_API_KEY"]
+except KeyError:
+    st.error("Secrets에서 KAKAO_API_KEY를 찾을 수 없습니다. Streamlit Settings -> Secrets 구성을 확인해 주세요.")
+    st.stop()
+
 SHEET_ID = "1o-FqwhkRsmUN5aH4ook5T7kQ_RAq6zSg6VV1Jymqi8E"
 SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 
+# 3. 구글 시트 데이터 불러오기
 @st.cache_data
 def load_data():
     try:
@@ -20,46 +27,60 @@ def load_data():
         st.error(f"구글 시트를 불러오는데 실패했습니다: {e}")
         return None
 
-df = load_data()
-
-if df is not None:
-    st.subheader("📊 불러온 원본 데이터")
-    st.dataframe(df)
-
-    # 3. 주소(D열: '주소') 기반으로 위도(H열: '위도'), 경도(I열: '경도') 추출
-    st.info("주소를 위도/경도로 변환 중입니다...")
+# 4. 카카오 로컬 API를 사용해 주소를 위도/경도로 변환하는 함수
+def get_kakao_lat_lon(address, api_key):
+    if pd.isna(address) or not str(address).strip():
+        return pd.Series([None, None])
     
-    geolocator = Nominatim(user_agent="my_map_app_v1")
-    geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
+    url = "https://dapi.kakao.com/v2/local/search/address.json"
+    headers = {"Authorization": f"KakaoAK {api_key}"}
+    params = {"query": address}
+    
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=5)
+        if response.status_code == 200:
+            result = response.json()
+            documents = result.get("documents")
+            if documents:
+                # 카카오 API 결과: x는 경도(longitude), y는 위도(latitude)
+                lon = float(documents[0]["x"])
+                lat = float(documents[0]["y"])
+                return pd.Series([lat, lon])
+    except Exception as e:
+        pass
+    
+    return pd.Series([None, None])
 
-    def get_lat_lon(address):
-        if pd.isna(address):
-            return pd.Series([None, None])
-        try:
-            location = geocode(address)
-            if location:
-                return pd.Series([location.latitude, location.longitude])
-            else:
-                return pd.Series([None, None])
-        except:
-            return pd.Series([None, None])
+# 캐싱 처리된 데이터 변환 함수 (한 번 구한 위도/경도를 매번 재호출하지 않음)
+@st.cache_data
+def process_geocoding(df, api_key):
+    # D열 '주소' 값을 전달하여 '위도', '경도' 채우기
+    df[['위도', '경도']] = df['주소'].apply(lambda addr: get_kakao_lat_lon(addr, api_key))
+    return df
 
-    # 구글 시트의 '주소' 열을 사용하여 '위도', '경도' 열 채우기
-    df[['위도', '경도']] = df['주소'].apply(get_lat_lon)
+# 메인 실행 로직
+df_raw = load_data()
 
-    # 위도, 경도 값이 정상적으로 생성된 데이터만 필터링
+if df_raw is not None:
+    st.subheader("📊 원본 구글 시트 데이터")
+    st.dataframe(df_raw)
+
+    with st.spinner("카카오 지도 API로 주소를 좌표로 변환하는 중..."):
+        df = process_geocoding(df_raw, KAKAO_API_KEY)
+
+    # 정상적으로 좌표가 변환된 행만 필터링
     df_map = df.dropna(subset=['위도', '경도']).copy()
-
-    # Streamlit 지도 표시용 컬럼명(latitude, longitude) 매핑
+    
+    # Streamlit 지도용 표준 컬럼 생성
     df_map['latitude'] = df_map['위도']
     df_map['longitude'] = df_map['경도']
 
     if not df_map.empty:
-        st.subheader("🗺️ 대리점 지도 시각화")
-        # 지도에 위치 표시
+        st.subheader("🗺️ 카카오 API 변환 위치 지도")
+        # 지도 출력
         st.map(df_map[['latitude', 'longitude']])
 
-        st.subheader("✅ 위도/경도 변환 완료 데이터")
+        st.subheader("✅ 변환 완료 데이터 (H열: 위도 / I열: 경도)")
         st.dataframe(df)
     else:
-        st.warning("위도와 경도를 추출할 수 있는 유효한 주소가 없습니다. 구글 시트의 D열 헤더가 '주소'로 잘 설정되어 있는지 확인해 주세요.")
+        st.warning("위도와 경도를 추출할 수 있는 유효한 주소가 없습니다. 구글 시트의 D열 헤더가 '주소'로 되어 있는지 확인해 주세요.")
