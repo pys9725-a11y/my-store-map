@@ -30,20 +30,20 @@ if df_raw is not None:
     # Valid한 좌표만 남기기 (한국 좌표 범위: 위도 33~39, 경도 124~132)
     df_valid = df[(df['lat'].between(33, 39)) & (df['lon'].between(124, 132))].copy()
 
-    # [추가] 부서(B열) 기준 색상 팔레트 생성
+    # 라이트 배경 지도에서 잘 보이는 선명한 부서별 색상 팔레트
     color_palette = [
-        [255, 75, 75, 200],   # Red
-        [31, 119, 180, 200],  # Blue
-        [44, 160, 44, 200],   # Green
-        [255, 127, 14, 200],  # Orange
-        [148, 103, 189, 200], # Purple
-        [140, 86, 75, 200],   # Brown
-        [227, 119, 194, 200], # Pink
-        [127, 127, 127, 200]  # Gray
+        [220, 38, 38, 220],   # Red
+        [37, 99, 235, 220],   # Blue
+        [22, 163, 74, 220],   # Green
+        [217, 119, 6, 220],   # Orange
+        [147, 51, 234, 220],  # Purple
+        [219, 39, 119, 220],  # Pink
+        [13, 148, 136, 220],  # Teal
+        [75, 85, 99, 220]     # Gray
     ]
     unique_depts = df_valid['부서'].dropna().unique() if '부서' in df_valid.columns else []
     dept_color_map = {dept: color_palette[i % len(color_palette)] for i, dept in enumerate(unique_depts)}
-    df_valid['color'] = df_valid['부서'].map(lambda d: dept_color_map.get(d, [100, 100, 100, 200]))
+    df_valid['color'] = df_valid['부서'].map(lambda d: dept_color_map.get(d, [100, 100, 100, 220]))
 
     # 1. 검색 기능
     search_query = st.text_input("🔍 검색어 입력 (대리점명, 센터, 부서, 주소, 대표자명 등)", "")
@@ -60,7 +60,7 @@ if df_raw is not None:
     st.subheader("🗺️ 대리점 위치 지도")
     
     if not df_display.empty:
-        # [추가] 부서별 색상 범례 표시
+        # 부서별 색상 범례 표시
         if len(unique_depts) > 0:
             st.markdown("**🎨 부서별 색상 범례**")
             legend_cols = st.columns(min(len(unique_depts), 6))
@@ -86,33 +86,39 @@ if df_raw is not None:
             data=df_display,
             get_position=["lon", "lat"],
             get_color="color",
-            get_radius=200,
+            get_radius=180,
             radius_scale=6,
-            radius_min_pixels=6,
-            radius_max_pixels=15,
+            radius_min_pixels=7,
+            radius_max_pixels=16,
             pickable=True,        # 클릭/마우스 오버 허용
             auto_highlight=True,  # 마우스 오버 시 강조
         )
 
-        # [추가] 클릭/마우스 오버 팝업 툴팁
+        # 라이트 모드에 맞춘 깔끔한 카드형 팝업 툴팁
         tooltip = {
-            "html": "<b>대리점명:</b> {대리점명}<br/>"
+            "html": "<div style='font-family: sans-serif; line-height: 1.5;'>"
+                    "<b style='font-size: 14px; color: #1E293B;'>{대리점명}</b><hr style='margin: 4px 0; border: 0.5px solid #E2E8F0;'/>"
                     "<b>부서:</b> {부서}<br/>"
                     "<b>주소:</b> {주소}<br/>"
-                    "<b>대표자:</b> {대표자명}",
+                    "<b>대표자:</b> {대표자명}"
+                    "</div>",
             "style": {
-                "backgroundColor": "#1E293B",
-                "color": "white",
-                "fontSize": "13px",
-                "padding": "8px",
-                "borderRadius": "4px"
+                "backgroundColor": "#FFFFFF",
+                "color": #334155,
+                "fontSize": "12px",
+                "padding": "10px 14px",
+                "borderRadius": "8px",
+                "boxShadow": "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+                "border": "1px solid #E2E8F0"
             }
         }
 
+        # CartoDB Positron 오픈소스 라이트 지도 타일 적용
         st.pydeck_chart(
             pdk.Deck(
                 layers=[layer],
                 initial_view_state=view_state,
+                map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
                 tooltip=tooltip
             )
         )
@@ -122,7 +128,6 @@ if df_raw is not None:
     # 3. 데이터 표 출력 (위도, 경도 및 내부 생성 컬럼 모두 제외)
     st.subheader("📋 대리점 목록")
     
-    # 표에서 숨길 컬럼들 지정
     cols_to_exclude = ['위도', '경도', 'lat', 'lon', 'latitude', 'longitude', 'color']
     display_columns = [col for col in df_display.columns if col not in cols_to_exclude]
     
