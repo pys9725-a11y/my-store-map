@@ -29,7 +29,7 @@ if df_raw is not None:
     df['lat'] = pd.to_numeric(df['위도'].astype(str).str.replace(',', ''), errors='coerce')
     df['lon'] = pd.to_numeric(df['경도'].astype(str).str.replace(',', ''), errors='coerce')
 
-    # 유효한 대한민국 좌표 데이터만 추출
+    # 유효한 좌표 데이터만 추출
     df_valid = df[(df['lat'].between(33, 39)) & (df['lon'].between(124, 132))].copy()
 
     # 3. '부서' 기준 색상 팔레트 자동 생성 (RGB)
@@ -71,11 +71,17 @@ if df_raw is not None:
         with legend_cols[col_idx]:
             st.markdown(f"<span style='color:{color_hex}; font-weight:bold;'>■</span> {dept}", unsafe_allow_html=True)
 
-    # 6. 대한민국 전역으로 범위 고정 (ViewState 설정)
+    # 6. 데이터 위치에 따른 동적 중심점 설정 (자동 뷰)
+    if not df_display.empty:
+        mid_lat = df_display['lat'].mean()
+        mid_lon = df_display['lon'].mean()
+    else:
+        mid_lat, mid_lon = 37.5, 127.0
+
     view_state = pdk.ViewState(
-        latitude=36.2,    # 대한민국 중심 위도
-        longitude=127.8,  # 대한민국 중심 경도
-        zoom=6.8,         # 한반도 전체가 시원하게 보이는 줌 레벨
+        latitude=mid_lat,
+        longitude=mid_lon,
+        zoom=9,
         pitch=0,
     )
 
@@ -85,7 +91,8 @@ if df_raw is not None:
         data=df_display,
         get_position=["lon", "lat"],
         get_color="color",
-        get_radius=4000,
+        get_radius=100,
+        radius_scale=10,
         radius_min_pixels=7,
         radius_max_pixels=18,
         pickable=True,       # 정보 클릭/마우스 오버 허용
