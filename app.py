@@ -2,6 +2,30 @@ import streamlit as st
 import pandas as pd
 import pydeck as pdk
 
+
+st.markdown(
+    """
+    <style>
+        /* 1. 우측 상단 툴바, 헤더, 푸터 및 Manage App 버튼 숨기기 */
+        header[data-testid="stHeader"] {
+            visibility: hidden;
+            height: 0rem;
+        }
+        footer {
+            visibility: hidden;
+        }
+        [data-testid="manage-app-button"],
+        .stAppViewerBadge,
+        div[class*="viewerBadge"] {
+            display: none !important;
+        }
+
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+
 st.set_page_config(page_title="대리점 위치 지도 시각화", layout="wide")
 st.title("📍 대리점 위치 지도 시각화")
 
