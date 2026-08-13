@@ -1,0 +1,5 @@
+[theme]
+base = "light"
+# Streamlit 기본 accent color는 빨간색(#FF4B4B)이라 멀티셀렉트 선택 태그 등
+# 여러 위젯의 강조색이 자극적인 빨간색으로 나타남 -> 차분한 블루로 변경
+primaryColor = "#2563EB"
