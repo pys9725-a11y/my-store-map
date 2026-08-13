@@ -23,18 +23,6 @@ st.markdown(
             display: none !important;
         }
 
-        /* 2. 지사 선택(multiselect) 태그 색상 - 테마 accent color(빨강)가 그대로
-           적용되어 너무 튀어 보이므로, 차분한 블루 톤으로 통일 (보험용 오버라이드) */
-        div[data-baseweb="tag"], span[data-baseweb="tag"] {
-            background-color: #EFF6FF !important;
-            background: #EFF6FF !important;
-            border: 1px solid #BFDBFE !important;
-        }
-        div[data-baseweb="tag"] *, span[data-baseweb="tag"] * {
-            color: #1E3A8A !important;
-            fill: #1E3A8A !important;
-        }
-
 </style>
 """,
     unsafe_allow_html=True,
@@ -103,24 +91,26 @@ if df_raw is not None:
     df_invalid = df[~in_range].copy()
 
     # 라이트 배경 지도에서 잘 보이는 선명한 부서별 색상 팔레트 (지도 점 색상 전용)
+    # 아래 토글 버튼의 색상 사각형 이모지와 1:1로 대응시킴 (빨간색 계열은 의도적으로 제외)
     color_palette = [
-        [37, 99, 235, 220],   # Blue
-        [22, 163, 74, 220],   # Green
-        [217, 119, 6, 220],   # Orange
-        [147, 51, 234, 220],  # Purple
-        [13, 148, 136, 220],  # Teal
-        [219, 39, 119, 220],  # Pink
-        [120, 72, 43, 220],   # Brown
-        [75, 85, 99, 220],    # Gray
+        [217, 119, 6, 220],   # 🟧 Orange
+        [22, 163, 74, 220],   # 🟩 Green
+        [37, 99, 235, 220],   # 🟦 Blue
+        [147, 51, 234, 220],  # 🟪 Purple
+        [120, 72, 43, 220],   # 🟫 Brown
+        [55, 65, 81, 220],    # ⬛ Black/Gray
     ]
+    emoji_palette = ["🟧", "🟩", "🟦", "🟪", "🟫", "⬛"]
 
     if "부서" in df_valid.columns:
         unique_depts = df_valid["부서"].dropna().unique()
         dept_color_map = {dept: color_palette[i % len(color_palette)] for i, dept in enumerate(unique_depts)}
+        dept_emoji_map = {dept: emoji_palette[i % len(emoji_palette)] for i, dept in enumerate(unique_depts)}
         df_valid["color"] = df_valid["부서"].map(lambda d: dept_color_map.get(d, [100, 100, 100, 220]))
     else:
         unique_depts = []
         dept_color_map = {}
+        dept_emoji_map = {}
         df_valid["color"] = [[100, 100, 100, 220]] * len(df_valid)
 
     # 0-1. 지사별 통계 요약 (검색/필터와 무관하게 전체 데이터 기준)
@@ -152,24 +142,19 @@ if df_raw is not None:
         )
         st.altair_chart(dept_chart, use_container_width=True)
 
-    # 0-2. 전체 지사 목록 (다중 선택 가능한 필터 — 새로고침 없이 즉시 지도에 반영됨)
+    # 0-2. 지도 색상 토글 버튼 (지사를 클릭하면 해당 지사만 지도에 표시,
+    # 다시 클릭해서 선택 해제하면 원래 크기의 전체 지도로 돌아감)
     if len(unique_depts) > 0:
-        selected_depts = st.multiselect(
-            "🏢 전체 지사 목록 (지사를 선택하면 해당 지사만 지도에 표시됩니다 · 여러 개 선택 가능, 비워두면 전체 표시)",
-            options=list(unique_depts),
+        dept_option_labels = [f"{dept_emoji_map[d]} {d}" for d in unique_depts]
+        label_to_dept = dict(zip(dept_option_labels, unique_depts))
+
+        selected_labels = st.pills(
+            "🗺️ 지도 색상 (지사를 클릭하면 해당 지사만 지도에 표시됩니다 · 여러 개 선택 가능, 선택 해제 시 전체 지도로 복귀)",
+            options=dept_option_labels,
+            selection_mode="multi",
             default=[],
         )
-
-        # 지도 점 색상과 지사명을 매칭해서 보여주는 참고용 범례 (선택과는 무관, 클릭 불가)
-        legend_items = []
-        for dept in unique_depts:
-            rgb = dept_color_map[dept]
-            color_hex = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-            legend_items.append(f"<span style='color:{color_hex};'>■</span> {dept}")
-        st.markdown(
-            f"<div style='font-size:12px; color:#64748B; margin-top:-8px;'>지도 색상: {' &nbsp; '.join(legend_items)}</div>",
-            unsafe_allow_html=True,
-        )
+        selected_depts = [label_to_dept[label] for label in (selected_labels or [])]
     else:
         selected_depts = []
 
