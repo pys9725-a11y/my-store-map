@@ -1,3 +1,4 @@
+import colorsys
 import math
 
 import altair as alt
@@ -90,27 +91,31 @@ if df_raw is not None:
     df_valid = df[in_range].copy()
     df_invalid = df[~in_range].copy()
 
-    # 라이트 배경 지도에서 잘 보이는 선명한 부서별 색상 팔레트 (지도 점 색상 전용)
-    # 아래 토글 버튼의 색상 사각형 이모지와 1:1로 대응시킴 (빨간색 계열은 의도적으로 제외)
-    color_palette = [
-        [217, 119, 6, 220],   # 🟧 Orange
-        [22, 163, 74, 220],   # 🟩 Green
-        [37, 99, 235, 220],   # 🟦 Blue
-        [147, 51, 234, 220],  # 🟪 Purple
-        [120, 72, 43, 220],   # 🟫 Brown
-        [55, 65, 81, 220],    # ⬛ Black/Gray
-    ]
-    emoji_palette = ["🟧", "🟩", "🟦", "🟪", "🟫", "⬛"]
+    # 라이트 배경 지도에서 잘 보이는 부서별 색상 (지도 점 색상 전용)
+    def generate_dept_colors(n: int):
+        """지사 수(n)에 맞춰 서로 겹치지 않는 색상을 자동 생성.
+        - 이모지/고정 팔레트는 8개 안팎이 한계라 지사가 많아지면 색이 반복되므로,
+          색상환에서 균등한 간격으로 색을 뽑아 지사 수와 무관하게 항상 고유하게 만듦
+        - 자극적으로 보이는 순수 빨강 계열(색상환 0도 부근)은 피함
+        """
+        colors = []
+        if n <= 0:
+            return colors
+        hue_start, hue_end = 20, 330  # 0도(빨강) 부근 제외
+        span = hue_end - hue_start
+        for i in range(n):
+            hue_deg = hue_start + (span * i / n if n > 1 else span / 2)
+            r, g, b = colorsys.hls_to_rgb(hue_deg / 360.0, 0.45, 0.65)
+            colors.append([int(r * 255), int(g * 255), int(b * 255), 220])
+        return colors
 
     if "부서" in df_valid.columns:
         unique_depts = df_valid["부서"].dropna().unique()
-        dept_color_map = {dept: color_palette[i % len(color_palette)] for i, dept in enumerate(unique_depts)}
-        dept_emoji_map = {dept: emoji_palette[i % len(emoji_palette)] for i, dept in enumerate(unique_depts)}
+        dept_color_map = dict(zip(unique_depts, generate_dept_colors(len(unique_depts))))
         df_valid["color"] = df_valid["부서"].map(lambda d: dept_color_map.get(d, [100, 100, 100, 220]))
     else:
         unique_depts = []
         dept_color_map = {}
-        dept_emoji_map = {}
         df_valid["color"] = [[100, 100, 100, 220]] * len(df_valid)
 
     # 0-1. 지사별 통계 요약 (검색/필터와 무관하게 전체 데이터 기준)
@@ -145,16 +150,24 @@ if df_raw is not None:
     # 0-2. 지도 색상 토글 버튼 (지사를 클릭하면 해당 지사만 지도에 표시,
     # 다시 클릭해서 선택 해제하면 원래 크기의 전체 지도로 돌아감)
     if len(unique_depts) > 0:
-        dept_option_labels = [f"{dept_emoji_map[d]} {d}" for d in unique_depts]
-        label_to_dept = dict(zip(dept_option_labels, unique_depts))
-
-        selected_labels = st.pills(
+        selected_depts = st.pills(
             "🗺️ 지도 색상 (지사를 클릭하면 해당 지사만 지도에 표시됩니다 · 여러 개 선택 가능, 선택 해제 시 전체 지도로 복귀)",
-            options=dept_option_labels,
+            options=list(unique_depts),
             selection_mode="multi",
             default=[],
+        ) or []
+
+        # 버튼 글자만으로는 지사가 많을 때 색을 구분해서 표시할 수 없어서,
+        # 실제 지도 점 색상과 정확히 일치하는 참고용 범례를 별도로 표시 (선택과는 무관)
+        legend_items = []
+        for dept in unique_depts:
+            rgb = dept_color_map[dept]
+            color_hex = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+            legend_items.append(f"<span style='color:{color_hex};'>■</span> {dept}")
+        st.markdown(
+            f"<div style='font-size:12px; color:#64748B;'>지도 점 색상: {' &nbsp; '.join(legend_items)}</div>",
+            unsafe_allow_html=True,
         )
-        selected_depts = [label_to_dept[label] for label in (selected_labels or [])]
     else:
         selected_depts = []
 
@@ -200,7 +213,11 @@ if df_raw is not None:
                 return 12.0
             # span(위경도 폭)이 좁을수록 확대, 넓을수록 축소되도록 로그 스케일로 계산
             zoom = math.log2(360 / span) - 1
-            return max(4.0, min(zoom, 14.0))
+            # 최소 줌(=최대 축소)을 대한민국 전체가 보이는 수준(약 6.3)으로 제한.
+            # 기존 4.0은 한국 전체 범위(위도 33~39, 경도 124~132)보다 훨씬 넓게
+            # (중국·일본 일부까지) 축소되어 보이는 문제가 있었음
+            KOREA_OVERVIEW_ZOOM = 6.3
+            return max(KOREA_OVERVIEW_ZOOM, min(zoom, 14.0))
 
         view_state = pdk.ViewState(
             # numpy 타입이 그대로 JSON 직렬화될 때 값이 깨지는 것을 방지하기 위해 float()로 명시 변환
