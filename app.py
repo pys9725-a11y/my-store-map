@@ -22,6 +22,19 @@ st.markdown(
             display: none !important;
         }
 
+        /* 2. 지사 선택(multiselect) 태그 색상 - 기본값이 항목마다 빨강/원색으로
+           배정되어 너무 튀어 보이므로, 차분한 단색 톤으로 통일 */
+        div[data-baseweb="tag"] {
+            background-color: #E2E8F0 !important;
+            border: 1px solid #CBD5E1 !important;
+        }
+        div[data-baseweb="tag"] span {
+            color: #1E293B !important;
+        }
+        div[data-baseweb="tag"] svg {
+            fill: #1E293B !important;
+        }
+
 </style>
 """,
     unsafe_allow_html=True,
