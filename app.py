@@ -150,21 +150,23 @@ if df_raw is not None:
         # 켜져 있어 스크롤이 끝없이 되므로, Altair로 직접 그려서 0~40으로 고정하고
         # 확대/이동은 끈다 (.interactive() 호출하지 않음)
         # 세로 막대 + 지도 마커와 동일한 지사별 색상 적용
-        dept_chart = (
-            alt.Chart(dept_counts_df)
-            .mark_bar()
-            .encode(
-                x=alt.X("지사:N", sort=list(unique_depts), title=None, axis=alt.Axis(labelAngle=-40)),
-                y=alt.Y("대리점 수:Q", scale=alt.Scale(domain=[0, 40], clamp=True), title="대리점 수"),
-                color=alt.Color(
-                    "지사:N",
-                    scale=alt.Scale(domain=list(unique_depts), range=[dept_hex_map[d] for d in unique_depts]),
-                    legend=None,
-                ),
-                tooltip=["지사", "대리점 수"],
-            )
+        dept_bar = alt.Chart(dept_counts_df).mark_bar().encode(
+            x=alt.X("지사:N", sort=list(unique_depts), title=None, axis=alt.Axis(labelAngle=-40)),
+            y=alt.Y("대리점 수:Q", scale=alt.Scale(domain=[0, 40], clamp=True), title="대리점 수"),
+            color=alt.Color(
+                "지사:N",
+                scale=alt.Scale(domain=list(unique_depts), range=[dept_hex_map[d] for d in unique_depts]),
+                legend=None,
+            ),
+            tooltip=["지사", "대리점 수"],
         )
-        st.altair_chart(dept_chart, use_container_width=True)
+        # 막대 위에 값(대리점 수) 라벨을 텍스트로 표시해 한눈에 값이 보이게 함
+        dept_labels = alt.Chart(dept_counts_df).mark_text(dy=-8, fontWeight="bold").encode(
+            x=alt.X("지사:N", sort=list(unique_depts)),
+            y=alt.Y("대리점 수:Q", scale=alt.Scale(domain=[0, 40], clamp=True)),
+            text="대리점 수:Q",
+        )
+        st.altair_chart(dept_bar + dept_labels, use_container_width=True)
 
     # 0-2. 지도 색상 토글 버튼 (지사를 클릭하면 해당 지사만 지도에 표시,
     # 다시 클릭해서 선택 해제하면 원래 크기의 전체 지도로 돌아감)
