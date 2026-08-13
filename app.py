@@ -1,3 +1,5 @@
+import math
+
 import streamlit as st
 import pandas as pd
 import pydeck as pdk
@@ -143,10 +145,23 @@ if df_raw is not None:
         mid_lat = df_display["lat"].mean()
         mid_lon = df_display["lon"].mean()
 
+        # 데이터가 퍼져있는 범위(bounding box)에 맞춰 줌 레벨을 자동 계산
+        # (고정 zoom=8만 쓰면 데이터가 한 곳에 몰려있을 때 불필요하게 축소되어 보임)
+        def compute_zoom(lat_series, lon_series):
+            if len(lat_series) <= 1:
+                return 12.0
+            span = max(lat_series.max() - lat_series.min(), lon_series.max() - lon_series.min())
+            if span <= 0:
+                return 12.0
+            # span(위경도 폭)이 좁을수록 확대, 넓을수록 축소되도록 로그 스케일로 계산
+            zoom = math.log2(360 / span) - 1
+            return max(4.0, min(zoom, 14.0))
+
         view_state = pdk.ViewState(
-            latitude=mid_lat if not pd.isna(mid_lat) else 37.5,
-            longitude=mid_lon if not pd.isna(mid_lon) else 127.0,
-            zoom=8,
+            # numpy 타입이 그대로 JSON 직렬화될 때 값이 깨지는 것을 방지하기 위해 float()로 명시 변환
+            latitude=float(mid_lat) if not pd.isna(mid_lat) else 37.5,
+            longitude=float(mid_lon) if not pd.isna(mid_lon) else 127.0,
+            zoom=compute_zoom(df_display["lat"], df_display["lon"]),
             pitch=0,
         )
 
@@ -189,7 +204,9 @@ if df_raw is not None:
                 initial_view_state=view_state,
                 map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
                 tooltip=tooltip
-            )
+            ),
+            height=600,
+            use_container_width=True,
         )
     else:
         st.warning("표시할 수 있는 위치 데이터가 없거나, 구글 시트의 위도/경도 값이 올바르지 않습니다.")
