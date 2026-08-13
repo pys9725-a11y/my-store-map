@@ -279,6 +279,13 @@ if df_raw is not None:
             use_container_width=True,
             key=f"store_map_{view_latitude:.4f}_{view_longitude:.4f}_{view_zoom:.2f}_{len(df_display)}",
         )
+
+        # 임시 디버그 표시: 실제로 코드가 계산한 값과 화면에 보이는 지도가
+        # 일치하는지 확인하기 위함 (원인 파악 후 제거 예정)
+        st.caption(
+            f"🔧 디버그 — 중심: 위도 {view_latitude:.4f}, 경도 {view_longitude:.4f} · "
+            f"줌: {view_zoom:.2f} · 표시 데이터: {len(df_display)}건"
+        )
     else:
         st.warning("표시할 수 있는 위치 데이터가 없거나, 구글 시트의 위도/경도 값이 올바르지 않습니다.")
 
