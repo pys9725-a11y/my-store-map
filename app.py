@@ -122,7 +122,19 @@ if df_raw is not None:
         dept_color_map = {}
         df_valid["color"] = [[100, 100, 100, 220]] * len(df_valid)
 
-    # 0. 전체 지사 목록 (다중 선택 가능한 필터 — 새로고침 없이 즉시 지도에 반영됨)
+    # 0-1. 지사별 통계 요약 (검색/필터와 무관하게 전체 데이터 기준)
+    st.markdown("**📊 전체 현황**")
+    summary_col1, summary_col2 = st.columns(2)
+    summary_col1.metric("총 대리점 수", f"{len(df_valid):,}개")
+    summary_col2.metric("총 지사 수", f"{len(unique_depts):,}개")
+
+    if len(unique_depts) > 0:
+        dept_counts = (
+            df_valid["부서"].value_counts().reindex(unique_depts).rename("대리점 수")
+        )
+        st.bar_chart(dept_counts, horizontal=True)
+
+    # 0-2. 전체 지사 목록 (다중 선택 가능한 필터 — 새로고침 없이 즉시 지도에 반영됨)
     if len(unique_depts) > 0:
         selected_depts = st.multiselect(
             "🏢 전체 지사 목록 (지사를 선택하면 해당 지사만 지도에 표시됩니다 · 여러 개 선택 가능, 비워두면 전체 표시)",
