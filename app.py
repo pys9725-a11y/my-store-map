@@ -219,11 +219,14 @@ if df_raw is not None:
             KOREA_OVERVIEW_ZOOM = 6.3
             return max(KOREA_OVERVIEW_ZOOM, min(zoom, 14.0))
 
+        view_latitude = float(mid_lat) if not pd.isna(mid_lat) else 37.5
+        view_longitude = float(mid_lon) if not pd.isna(mid_lon) else 127.0
+        view_zoom = compute_zoom(df_display["lat"], df_display["lon"])
+
         view_state = pdk.ViewState(
-            # numpy 타입이 그대로 JSON 직렬화될 때 값이 깨지는 것을 방지하기 위해 float()로 명시 변환
-            latitude=float(mid_lat) if not pd.isna(mid_lat) else 37.5,
-            longitude=float(mid_lon) if not pd.isna(mid_lon) else 127.0,
-            zoom=compute_zoom(df_display["lat"], df_display["lon"]),
+            latitude=view_latitude,
+            longitude=view_longitude,
+            zoom=view_zoom,
             pitch=0,
         )
 
@@ -260,6 +263,11 @@ if df_raw is not None:
         }
 
         # CartoDB Positron 오픈소스 라이트 지도 타일 적용
+        #
+        # key를 넣지 않으면 브라우저에 이미 떠 있는 지도 컴포넌트가 코드에서 바뀐
+        # initial_view_state(줌/중심 좌표)를 무시하고 예전 뷰 상태를 그대로 유지하는
+        # 경우가 있어, 표시 중인 데이터가 바뀔 때마다(줌/중심 좌표가 달라질 때마다)
+        # key도 함께 바꿔서 지도를 강제로 새로 그리도록 함
         st.pydeck_chart(
             pdk.Deck(
                 layers=[layer],
@@ -269,6 +277,7 @@ if df_raw is not None:
             ),
             height=600,
             use_container_width=True,
+            key=f"store_map_{view_latitude:.4f}_{view_longitude:.4f}_{view_zoom:.2f}_{len(df_display)}",
         )
     else:
         st.warning("표시할 수 있는 위치 데이터가 없거나, 구글 시트의 위도/경도 값이 올바르지 않습니다.")
