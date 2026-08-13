@@ -1,5 +1,4 @@
 import math
-import urllib.parse
 
 import streamlit as st
 import pandas as pd
@@ -91,56 +90,47 @@ if df_raw is not None:
     df_invalid = df[~in_range].copy()
 
     # 라이트 배경 지도에서 잘 보이는 선명한 부서별 색상 팔레트
+    # (아래 지사 선택 UI의 색상 사각형 이모지와 순서를 맞춰서 지도 점 색상과 일치시킴)
     color_palette = [
-        [220, 38, 38, 220],   # Red
-        [37, 99, 235, 220],   # Blue
-        [22, 163, 74, 220],   # Green
-        [217, 119, 6, 220],   # Orange
-        [147, 51, 234, 220],  # Purple
-        [219, 39, 119, 220],  # Pink
-        [13, 148, 136, 220],  # Teal
-        [75, 85, 99, 220]     # Gray
+        [229, 57, 53, 220],   # 🟥 Red
+        [244, 140, 6, 220],   # 🟧 Orange
+        [234, 179, 8, 220],   # 🟨 Yellow
+        [22, 163, 74, 220],   # 🟩 Green
+        [37, 99, 235, 220],   # 🟦 Blue
+        [147, 51, 234, 220],  # 🟪 Purple
+        [120, 72, 43, 220],   # 🟫 Brown
+        [55, 65, 81, 220],    # ⬛ Black/Gray
     ]
+    emoji_palette = ["🟥", "🟧", "🟨", "🟩", "🟦", "🟪", "🟫", "⬛"]
+
     if "부서" in df_valid.columns:
         unique_depts = df_valid["부서"].dropna().unique()
         dept_color_map = {dept: color_palette[i % len(color_palette)] for i, dept in enumerate(unique_depts)}
+        dept_emoji_map = {dept: emoji_palette[i % len(emoji_palette)] for i, dept in enumerate(unique_depts)}
         df_valid["color"] = df_valid["부서"].map(lambda d: dept_color_map.get(d, [100, 100, 100, 220]))
     else:
         unique_depts = []
         dept_color_map = {}
+        dept_emoji_map = {}
         df_valid["color"] = [[100, 100, 100, 220]] * len(df_valid)
 
-    # 0. 전체 지사 목록 (클릭 시 URL 쿼리 파라미터(dept)를 통해 해당 지사만 필터링)
-    selected_dept = st.query_params.get("dept")
-    if selected_dept in (None, "", "__all__"):
-        selected_dept = None
-
-    st.markdown(
-        "**🏢 전체 지사 목록** "
-        "<span style='font-weight:normal; color:#64748B; font-size:12px;'>"
-        "(지사를 클릭하면 해당 지사만 지도에 표시됩니다)</span>",
-        unsafe_allow_html=True,
-    )
-
+    # 0. 전체 지사 목록 (다중 선택 가능한 필터 — 새로고침 없이 즉시 지도에 반영됨)
     if len(unique_depts) > 0:
-        def _dept_link(label: str, color_hex: str, is_active: bool, param_value: str) -> str:
-            style = "text-decoration: underline; font-weight:700;" if is_active else "font-weight:600; text-decoration:none;"
-            return (
-                f"<a href='?dept={urllib.parse.quote(param_value)}' target='_self' "
-                f"style='color:{color_hex}; {style} margin-right:18px; cursor:pointer;'>■ {label}</a>"
-            )
+        dept_option_labels = [f"{dept_emoji_map[d]} {d}" for d in unique_depts]
+        label_to_dept = dict(zip(dept_option_labels, unique_depts))
 
-        legend_links = [_dept_link("전체 보기", "#334155", selected_dept is None, "__all__")]
-        for dept in unique_depts:
-            rgb = dept_color_map[dept]
-            color_hex = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-            legend_links.append(_dept_link(dept, color_hex, selected_dept == dept, dept))
+        selected_labels = st.multiselect(
+            "🏢 전체 지사 목록 (지사를 선택하면 해당 지사만 지도에 표시됩니다 · 여러 개 선택 가능, 비워두면 전체 표시)",
+            options=dept_option_labels,
+            default=[],
+        )
+        selected_depts = [label_to_dept[label] for label in selected_labels]
+    else:
+        selected_depts = []
 
-        st.markdown(" ".join(legend_links), unsafe_allow_html=True)
-
-    if selected_dept and "부서" in df_valid.columns:
-        df_dept_base = df_valid[df_valid["부서"] == selected_dept]
-        st.caption(f"📍 '{selected_dept}' 지사만 표시 중 — 총 {len(df_dept_base)}건")
+    if selected_depts and "부서" in df_valid.columns:
+        df_dept_base = df_valid[df_valid["부서"].isin(selected_depts)]
+        st.caption(f"📍 선택된 지사({', '.join(selected_depts)})만 표시 중 — 총 {len(df_dept_base)}건")
     else:
         df_dept_base = df_valid
 
