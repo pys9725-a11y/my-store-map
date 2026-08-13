@@ -1,4 +1,5 @@
 import math
+import urllib.parse
 
 import streamlit as st
 import pandas as pd
@@ -28,8 +29,8 @@ st.markdown(
 )
 
 
-st.set_page_config(page_title="대리점 위치 지도 시각화", layout="wide")
-st.title("📍 대리점 위치 지도 시각화")
+st.set_page_config(page_title="전국 대리점 위치 현황", layout="wide")
+st.title("📍 전국 대리점 위치 현황")
 
 SHEET_ID = "1o-FqwhkRsmUN5aH4ook5T7kQ_RAq6zSg6VV1Jymqi8E"
 SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
@@ -109,16 +110,50 @@ if df_raw is not None:
         dept_color_map = {}
         df_valid["color"] = [[100, 100, 100, 220]] * len(df_valid)
 
+    # 0. 전체 지사 목록 (클릭 시 URL 쿼리 파라미터(dept)를 통해 해당 지사만 필터링)
+    selected_dept = st.query_params.get("dept")
+    if selected_dept in (None, "", "__all__"):
+        selected_dept = None
+
+    st.markdown(
+        "**🏢 전체 지사 목록** "
+        "<span style='font-weight:normal; color:#64748B; font-size:12px;'>"
+        "(지사를 클릭하면 해당 지사만 지도에 표시됩니다)</span>",
+        unsafe_allow_html=True,
+    )
+
+    if len(unique_depts) > 0:
+        def _dept_link(label: str, color_hex: str, is_active: bool, param_value: str) -> str:
+            style = "text-decoration: underline; font-weight:700;" if is_active else "font-weight:600; text-decoration:none;"
+            return (
+                f"<a href='?dept={urllib.parse.quote(param_value)}' target='_self' "
+                f"style='color:{color_hex}; {style} margin-right:18px; cursor:pointer;'>■ {label}</a>"
+            )
+
+        legend_links = [_dept_link("전체 보기", "#334155", selected_dept is None, "__all__")]
+        for dept in unique_depts:
+            rgb = dept_color_map[dept]
+            color_hex = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
+            legend_links.append(_dept_link(dept, color_hex, selected_dept == dept, dept))
+
+        st.markdown(" ".join(legend_links), unsafe_allow_html=True)
+
+    if selected_dept and "부서" in df_valid.columns:
+        df_dept_base = df_valid[df_valid["부서"] == selected_dept]
+        st.caption(f"📍 '{selected_dept}' 지사만 표시 중 — 총 {len(df_dept_base)}건")
+    else:
+        df_dept_base = df_valid
+
     # 1. 검색 기능
     search_query = st.text_input("🔍 검색어 입력 (대리점명, 센터, 부서, 주소, 대표자명 등)", "")
 
     if search_query.strip():
         # 전체 열 데이터 중 검색어가 포함된 행 필터링
-        mask = df_valid.apply(lambda row: row.astype(str).str.contains(search_query, case=False).any(), axis=1)
-        df_display = df_valid[mask]
+        mask = df_dept_base.apply(lambda row: row.astype(str).str.contains(search_query, case=False).any(), axis=1)
+        df_display = df_dept_base[mask]
         st.info(f"'{search_query}' 검색 결과: 총 {len(df_display)}건")
     else:
-        df_display = df_valid
+        df_display = df_dept_base
 
     # 좌표 범위를 벗어나 지도에서 제외된 데이터가 있으면 알려주고, 원인 확인용으로 표시
     if not df_invalid.empty:
@@ -131,16 +166,6 @@ if df_raw is not None:
     st.subheader("🗺️ 대리점 위치 지도")
 
     if not df_display.empty:
-        # 부서별 색상 범례 표시
-        if len(unique_depts) > 0:
-            st.markdown("**🎨 부서별 색상 범례**")
-            legend_cols = st.columns(min(len(unique_depts), 6))
-            for i, dept in enumerate(unique_depts):
-                rgb = dept_color_map[dept]
-                color_hex = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-                with legend_cols[i % 6]:
-                    st.markdown(f"<span style='color:{color_hex}; font-weight:bold;'>■</span> {dept}", unsafe_allow_html=True)
-
         # 지도 중심점 자동 계산
         mid_lat = df_display["lat"].mean()
         mid_lon = df_display["lon"].mean()
