@@ -104,7 +104,7 @@ if df_raw is not None:
           경우가 많음)에 있는 지사끼리 색상환에서도 이웃한 색을 받아 비슷해
           보이므로, 골든 앵글(약 137.5도)만큼씩 건너뛰어 배치해 인접한 항목도
           최대한 멀리 떨어진 색을 받도록 함
-        - 색상이 비슷한 계열이라도 밝기를 번갈아 달리해 구분을 한 번 더 보강
+        - 채도를 높고 명도를 밝게 고정해서 칙칙하지 않고 선명한 색이 나오게 함
         - 자극적으로 보이는 순수 빨강 계열(색상환 0도 부근)은 피함
         """
         colors = []
@@ -113,11 +113,10 @@ if df_raw is not None:
         hue_start, hue_end = 15, 345  # 0도(빨강) 부근 제외
         span = hue_end - hue_start
         golden_angle = 137.508
-        lightness_options = [0.42, 0.58]
+        lightness, saturation = 0.55, 0.85  # 선명하고 밝은 톤 고정 (칙칙해 보이지 않도록)
         for i in range(n):
             hue_deg = hue_start + ((i * golden_angle) % span)
-            lightness = lightness_options[i % len(lightness_options)]
-            r, g, b = colorsys.hls_to_rgb(hue_deg / 360.0, lightness, 0.75)
+            r, g, b = colorsys.hls_to_rgb(hue_deg / 360.0, lightness, saturation)
             colors.append([int(r * 255), int(g * 255), int(b * 255), 230])
         return colors
 
