@@ -40,6 +40,10 @@ SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=cs
 LAT_RANGE = (33, 39)
 LON_RANGE = (124, 132)
 
+# 지도 최소 줌(=최대 축소) — 대한민국 전체가 보이는 수준으로 제한.
+# 사용자가 지도 "-" 버튼/스크롤로 이보다 더 축소하지 못하도록 min_zoom으로도 사용됨
+KOREA_OVERVIEW_ZOOM = 6.3
+
 
 @st.cache_data(ttl=600)  # 10분마다 구글 시트에서 최신 데이터를 다시 불러옴
 def load_data():
@@ -93,29 +97,39 @@ if df_raw is not None:
 
     # 라이트 배경 지도에서 잘 보이는 부서별 색상 (지도 점 색상 전용)
     def generate_dept_colors(n: int):
-        """지사 수(n)에 맞춰 서로 겹치지 않는 색상을 자동 생성.
+        """지사 수(n)에 맞춰 서로 뚜렷이 구분되는 색상을 자동 생성.
         - 이모지/고정 팔레트는 8개 안팎이 한계라 지사가 많아지면 색이 반복되므로,
-          색상환에서 균등한 간격으로 색을 뽑아 지사 수와 무관하게 항상 고유하게 만듦
+          지사 수와 무관하게 항상 고유하게 생성
+        - 단순히 순서대로 균등 분할하면 시트에서 바로 옆(=지리적으로도 가까운
+          경우가 많음)에 있는 지사끼리 색상환에서도 이웃한 색을 받아 비슷해
+          보이므로, 골든 앵글(약 137.5도)만큼씩 건너뛰어 배치해 인접한 항목도
+          최대한 멀리 떨어진 색을 받도록 함
+        - 색상이 비슷한 계열이라도 밝기를 번갈아 달리해 구분을 한 번 더 보강
         - 자극적으로 보이는 순수 빨강 계열(색상환 0도 부근)은 피함
         """
         colors = []
         if n <= 0:
             return colors
-        hue_start, hue_end = 20, 330  # 0도(빨강) 부근 제외
+        hue_start, hue_end = 15, 345  # 0도(빨강) 부근 제외
         span = hue_end - hue_start
+        golden_angle = 137.508
+        lightness_options = [0.42, 0.58]
         for i in range(n):
-            hue_deg = hue_start + (span * i / n if n > 1 else span / 2)
-            r, g, b = colorsys.hls_to_rgb(hue_deg / 360.0, 0.45, 0.65)
-            colors.append([int(r * 255), int(g * 255), int(b * 255), 220])
+            hue_deg = hue_start + ((i * golden_angle) % span)
+            lightness = lightness_options[i % len(lightness_options)]
+            r, g, b = colorsys.hls_to_rgb(hue_deg / 360.0, lightness, 0.75)
+            colors.append([int(r * 255), int(g * 255), int(b * 255), 230])
         return colors
 
     if "부서" in df_valid.columns:
         unique_depts = df_valid["부서"].dropna().unique()
         dept_color_map = dict(zip(unique_depts, generate_dept_colors(len(unique_depts))))
+        dept_hex_map = {d: "#{:02x}{:02x}{:02x}".format(*rgb[:3]) for d, rgb in dept_color_map.items()}
         df_valid["color"] = df_valid["부서"].map(lambda d: dept_color_map.get(d, [100, 100, 100, 220]))
     else:
         unique_depts = []
         dept_color_map = {}
+        dept_hex_map = {}
         df_valid["color"] = [[100, 100, 100, 220]] * len(df_valid)
 
     # 0-1. 지사별 통계 요약 (검색/필터와 무관하게 전체 데이터 기준)
@@ -136,12 +150,18 @@ if df_raw is not None:
         # st.bar_chart는 값 범위를 고정할 수 없고 기본으로 확대/이동(pan-zoom)이
         # 켜져 있어 스크롤이 끝없이 되므로, Altair로 직접 그려서 0~40으로 고정하고
         # 확대/이동은 끈다 (.interactive() 호출하지 않음)
+        # 세로 막대 + 지도 마커와 동일한 지사별 색상 적용
         dept_chart = (
             alt.Chart(dept_counts_df)
-            .mark_bar(color="#2563EB")
+            .mark_bar()
             .encode(
-                x=alt.X("대리점 수:Q", scale=alt.Scale(domain=[0, 40], clamp=True), title="대리점 수"),
-                y=alt.Y("지사:N", sort=list(unique_depts), title=None),
+                x=alt.X("지사:N", sort=list(unique_depts), title=None, axis=alt.Axis(labelAngle=-40)),
+                y=alt.Y("대리점 수:Q", scale=alt.Scale(domain=[0, 40], clamp=True), title="대리점 수"),
+                color=alt.Color(
+                    "지사:N",
+                    scale=alt.Scale(domain=list(unique_depts), range=[dept_hex_map[d] for d in unique_depts]),
+                    legend=None,
+                ),
                 tooltip=["지사", "대리점 수"],
             )
         )
@@ -158,12 +178,10 @@ if df_raw is not None:
         ) or []
 
         # 버튼 글자만으로는 지사가 많을 때 색을 구분해서 표시할 수 없어서,
-        # 실제 지도 점 색상과 정확히 일치하는 참고용 범례를 별도로 표시 (선택과는 무관)
-        legend_items = []
-        for dept in unique_depts:
-            rgb = dept_color_map[dept]
-            color_hex = f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-            legend_items.append(f"<span style='color:{color_hex};'>■</span> {dept}")
+        # 실제 지도 점/그래프 막대 색상과 정확히 일치하는 참고용 범례를 별도로 표시 (선택과는 무관)
+        legend_items = [
+            f"<span style='color:{dept_hex_map[dept]};'>■</span> {dept}" for dept in unique_depts
+        ]
         st.markdown(
             f"<div style='font-size:12px; color:#64748B;'>지도 점 색상: {' &nbsp; '.join(legend_items)}</div>",
             unsafe_allow_html=True,
@@ -213,10 +231,6 @@ if df_raw is not None:
                 return 12.0
             # span(위경도 폭)이 좁을수록 확대, 넓을수록 축소되도록 로그 스케일로 계산
             zoom = math.log2(360 / span) - 1
-            # 최소 줌(=최대 축소)을 대한민국 전체가 보이는 수준(약 6.3)으로 제한.
-            # 기존 4.0은 한국 전체 범위(위도 33~39, 경도 124~132)보다 훨씬 넓게
-            # (중국·일본 일부까지) 축소되어 보이는 문제가 있었음
-            KOREA_OVERVIEW_ZOOM = 6.3
             return max(KOREA_OVERVIEW_ZOOM, min(zoom, 14.0))
 
         view_latitude = float(mid_lat) if not pd.isna(mid_lat) else 37.5
@@ -227,6 +241,10 @@ if df_raw is not None:
             latitude=view_latitude,
             longitude=view_longitude,
             zoom=view_zoom,
+            # 사용자가 지도의 "-" 버튼이나 스크롤/핀치로 직접 축소하더라도
+            # 대한민국 전체 범위보다 더 축소되지 않도록 하드 제한
+            min_zoom=KOREA_OVERVIEW_ZOOM,
+            max_zoom=18,
             pitch=0,
         )
 
@@ -278,13 +296,6 @@ if df_raw is not None:
             height=600,
             use_container_width=True,
             key=f"store_map_{view_latitude:.4f}_{view_longitude:.4f}_{view_zoom:.2f}_{len(df_display)}",
-        )
-
-        # 임시 디버그 표시: 실제로 코드가 계산한 값과 화면에 보이는 지도가
-        # 일치하는지 확인하기 위함 (원인 파악 후 제거 예정)
-        st.caption(
-            f"🔧 디버그 — 중심: 위도 {view_latitude:.4f}, 경도 {view_longitude:.4f} · "
-            f"줌: {view_zoom:.2f} · 표시 데이터: {len(df_display)}건"
         )
     else:
         st.warning("표시할 수 있는 위치 데이터가 없거나, 구글 시트의 위도/경도 값이 올바르지 않습니다.")
