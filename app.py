@@ -1,5 +1,6 @@
 import math
 
+import altair as alt
 import streamlit as st
 import pandas as pd
 import pydeck as pdk
@@ -129,10 +130,27 @@ if df_raw is not None:
     summary_col2.metric("총 지사 수", f"{len(unique_depts):,}개")
 
     if len(unique_depts) > 0:
-        dept_counts = (
-            df_valid["부서"].value_counts().reindex(unique_depts).rename("대리점 수")
+        dept_counts_df = (
+            df_valid["부서"]
+            .value_counts()
+            .reindex(unique_depts)
+            .rename("대리점 수")
+            .rename_axis("지사")
+            .reset_index()
         )
-        st.bar_chart(dept_counts, horizontal=True)
+        # st.bar_chart는 값 범위를 고정할 수 없고 기본으로 확대/이동(pan-zoom)이
+        # 켜져 있어 스크롤이 끝없이 되므로, Altair로 직접 그려서 0~40으로 고정하고
+        # 확대/이동은 끈다 (.interactive() 호출하지 않음)
+        dept_chart = (
+            alt.Chart(dept_counts_df)
+            .mark_bar(color="#2563EB")
+            .encode(
+                x=alt.X("대리점 수:Q", scale=alt.Scale(domain=[0, 40], clamp=True), title="대리점 수"),
+                y=alt.Y("지사:N", sort=list(unique_depts), title=None),
+                tooltip=["지사", "대리점 수"],
+            )
+        )
+        st.altair_chart(dept_chart, use_container_width=True)
 
     # 0-2. 전체 지사 목록 (다중 선택 가능한 필터 — 새로고침 없이 즉시 지도에 반영됨)
     if len(unique_depts) > 0:
