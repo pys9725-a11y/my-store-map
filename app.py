@@ -5,7 +5,7 @@ import altair as alt
 import streamlit as st
 import pandas as pd
 import pydeck as pdk
-from streamlit_extras.metric_cards import style_metric_cards
+import streamlit_shadcn_ui as ui
 
 
 st.markdown(
@@ -133,17 +133,13 @@ if df_raw is not None:
         df_valid["color"] = [[100, 100, 100, 220]] * len(df_valid)
 
     # 0-1. 지사별 통계 요약 (검색/필터와 무관하게 전체 데이터 기준)
-    st.subheader("📊 전체 현황", divider="blue")
+    # streamlit-shadcn-ui의 카드형 metric_card 사용 (shadcn/ui 스타일)
+    st.subheader("📊 전체 현황")
     summary_col1, summary_col2 = st.columns(2)
-    summary_col1.metric("총 대리점 수", f"{len(df_valid):,}개")
-    summary_col2.metric("총 지사 수", f"{len(unique_depts):,}개")
-    # streamlit-extras: 카드형 그림자/테두리를 st.metric에 적용해 좀 더 대시보드다운 느낌으로
-    style_metric_cards(
-        background_color="#F8FAFC",
-        border_color="#E2E8F0",
-        border_left_color="#2563EB",
-        box_shadow=True,
-    )
+    with summary_col1:
+        ui.metric_card(label="총 대리점 수", value=f"{len(df_valid):,}개", description="전체 등록 기준")
+    with summary_col2:
+        ui.metric_card(label="총 지사 수", value=f"{len(unique_depts):,}개", description="운영 중인 지사")
 
     if len(unique_depts) > 0:
         dept_counts_df = (
@@ -179,12 +175,14 @@ if df_raw is not None:
 
     # 0-2. 지도 색상 토글 버튼 (지사를 클릭하면 해당 지사만 지도에 표시,
     # 다시 클릭해서 선택 해제하면 원래 크기의 전체 지도로 돌아감)
+    # streamlit-shadcn-ui의 toggle_group(selection_mode="multiple")으로 다중 선택 지원
     if len(unique_depts) > 0:
-        selected_depts = st.pills(
-            "🗺️ 지도 색상 (지사를 클릭하면 해당 지사만 지도에 표시됩니다 · 여러 개 선택 가능, 선택 해제 시 전체 지도로 복귀)",
+        selected_depts = ui.toggle_group(
             options=list(unique_depts),
-            selection_mode="multi",
-            default=[],
+            value=[],
+            selection_mode="multiple",
+            label="🗺️ 지도 색상 (지사를 클릭하면 해당 지사만 지도에 표시됩니다 · 여러 개 선택 가능, 선택 해제 시 전체 지도로 복귀)",
+            key="dept_toggle_group",
         ) or []
 
         # 버튼 글자만으로는 지사가 많을 때 색을 구분해서 표시할 수 없어서,
@@ -224,7 +222,7 @@ if df_raw is not None:
             st.dataframe(df_invalid[invalid_preview_cols], use_container_width=True)
 
     # 2. 지도 출력 영역
-    st.subheader("🗺️ 대리점 위치 지도", divider="blue")
+    st.subheader("🗺️ 대리점 위치 지도")
 
     if not df_display.empty:
         # 지도 중심점 자동 계산
@@ -311,7 +309,7 @@ if df_raw is not None:
         st.warning("표시할 수 있는 위치 데이터가 없거나, 구글 시트의 위도/경도 값이 올바르지 않습니다.")
 
     # 3. 데이터 표 출력 (위도, 경도 및 내부 생성 컬럼 모두 제외)
-    st.subheader("📋 대리점 목록", divider="blue")
+    st.subheader("📋 대리점 목록")
 
     cols_to_exclude = ["위도", "경도", "lat", "lon", "latitude", "longitude", "color"]
     display_columns = [col for col in df_display.columns if col not in cols_to_exclude]
