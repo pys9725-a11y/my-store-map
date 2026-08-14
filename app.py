@@ -1,5 +1,6 @@
 import colorsys
 import math
+import re
 
 import altair as alt
 import streamlit as st
@@ -68,6 +69,16 @@ def load_consultant_data():
     except Exception as e:
         st.warning(f"컨설턴트 시트를 불러오는데 실패했습니다: {e}")
         return None
+
+
+def normalize_dealer_name(name) -> str:
+    """대리점명을 매칭 비교 전용으로 정규화 ('지점'/'대리점' 표기 차이를 '대리점'으로 통일).
+    화면에 실제로 보여주는 원래 이름은 건드리지 않고, 두 시트를 비교할 때만 사용.
+    예) '행복지점' / '행복대리점' -> 둘 다 '행복대리점'으로 정규화되어 같은 곳으로 매칭됨
+    """
+    name = str(name).strip()
+    stripped = re.sub(r"(지점|대리점)$", "", name).strip()
+    return f"{stripped}대리점" if stripped else name
 
 
 def parse_coord(series: pd.Series) -> pd.Series:
@@ -169,23 +180,34 @@ if df_raw is not None:
             (consultant_long["대리점명"] != "")
             & (~consultant_long["컨설턴트"].str.startswith("Unnamed"))
         ]
+        # 매칭 비교 전용 정규화 컬럼 ('지점'/'대리점' 표기 차이를 '대리점'으로 통일)
+        consultant_long["_dealer_norm"] = consultant_long["대리점명"].map(normalize_dealer_name)
 
-        dealer_to_consultants = consultant_long.groupby("대리점명")["컨설턴트"].apply(list).to_dict()
+        df_valid["_dealer_norm"] = df_valid["대리점명"].astype(str).str.strip().map(normalize_dealer_name)
+
+        dealer_to_consultants = consultant_long.groupby("_dealer_norm")["컨설턴트"].apply(list).to_dict()
+
+        # 정규화된 이름 -> 원래 표기 하나(대표값) 매핑 (불일치 목록을 원래 표기로 보여주기 위함)
+        norm_to_original_in_store = dict(zip(df_valid["_dealer_norm"], df_valid["대리점명"]))
+        norm_to_original_in_consultant = dict(zip(consultant_long["_dealer_norm"], consultant_long["대리점명"]))
 
         duplicate_assignments = [
-            (dealer, sorted(set(names)))
-            for dealer, names in dealer_to_consultants.items()
+            (norm_to_original_in_store.get(norm, norm_to_original_in_consultant.get(norm, norm)), sorted(set(names)))
+            for norm, names in dealer_to_consultants.items()
             if len(set(names)) > 1
         ]
 
-        dealer_names_in_store_sheet = set(df_valid["대리점명"].astype(str).str.strip())
-        dealer_names_in_consultant_sheet = set(dealer_to_consultants.keys())
-        unmatched_in_dealer_sheet = sorted(dealer_names_in_consultant_sheet - dealer_names_in_store_sheet)
-        unmatched_in_consultant_sheet = sorted(dealer_names_in_store_sheet - dealer_names_in_consultant_sheet)
+        store_norm_set = set(df_valid["_dealer_norm"])
+        consultant_norm_set = set(dealer_to_consultants.keys())
+        unmatched_in_dealer_sheet = sorted(
+            norm_to_original_in_consultant[n] for n in (consultant_norm_set - store_norm_set)
+        )
+        unmatched_in_consultant_sheet = sorted(
+            norm_to_original_in_store[n] for n in (store_norm_set - consultant_norm_set)
+        )
 
-        df_valid["담당컨설턴트"] = (
-            df_valid["대리점명"].astype(str).str.strip()
-            .map(lambda name: ", ".join(dict.fromkeys(dealer_to_consultants.get(name, []))))
+        df_valid["담당컨설턴트"] = df_valid["_dealer_norm"].map(
+            lambda norm: ", ".join(dict.fromkeys(dealer_to_consultants.get(norm, [])))
         )
         df_valid.loc[df_valid["담당컨설턴트"] == "", "담당컨설턴트"] = "미지정"
         unique_consultants = sorted(consultant_long["컨설턴트"].unique())
@@ -416,7 +438,7 @@ if df_raw is not None:
     # 3. 데이터 표 출력 (위도, 경도 및 내부 생성 컬럼 모두 제외)
     st.subheader("📋 대리점 목록")
 
-    cols_to_exclude = ["위도", "경도", "lat", "lon", "latitude", "longitude", "color"]
+    cols_to_exclude = ["위도", "경도", "lat", "lon", "latitude", "longitude", "color", "_dealer_norm"]
     display_columns = [col for col in df_display.columns if col not in cols_to_exclude]
 
     st.dataframe(df_display[display_columns], use_container_width=True)
