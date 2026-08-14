@@ -161,7 +161,8 @@ if df_raw is not None:
             tooltip=["지사", "대리점 수"],
         )
         # 막대 위에 값(대리점 수) 라벨을 텍스트로 표시해 한눈에 값이 보이게 함
-        dept_labels = alt.Chart(dept_counts_df).mark_text(dy=-8, fontWeight="bold").encode(
+        # (기본 글자 크기 11px에서 5단계 키운 16px)
+        dept_labels = alt.Chart(dept_counts_df).mark_text(dy=-8, fontWeight="bold", fontSize=16).encode(
             x=alt.X("지사:N", sort=list(unique_depts)),
             y=alt.Y("대리점 수:Q", scale=alt.Scale(domain=[0, 40], clamp=True)),
             text="대리점 수:Q",
