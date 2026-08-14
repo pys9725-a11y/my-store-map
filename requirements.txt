@@ -2,4 +2,4 @@ streamlit
 pandas
 pydeck
 altair
-streamlit-extras
+streamlit-shadcn-ui
