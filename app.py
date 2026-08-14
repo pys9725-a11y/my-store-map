@@ -37,6 +37,12 @@ st.title("📍 전국 대리점 위치 현황")
 SHEET_ID = "1o-FqwhkRsmUN5aH4ook5T7kQ_RAq6zSg6VV1Jymqi8E"
 SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
 
+# 컨설턴트 시트: 같은 문서의 다른 탭(워크시트). gid로 특정 탭을 지정해서 불러옴.
+# 1행 = 컨설턴트명(컬럼 헤더), 2~30행 = 그 컨설턴트가 담당하는 대리점명 목록
+# (컨설턴트별로 세로 나열된 "가로형" 시트라 df.melt()로 세로 목록으로 펼쳐서 사용)
+CONSULTANT_GID = "680750607"
+CONSULTANT_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={CONSULTANT_GID}"
+
 # 한국 좌표 범위 (대략적인 육지 + 도서 지역 포함)
 LAT_RANGE = (33, 39)
 LON_RANGE = (124, 132)
@@ -52,6 +58,15 @@ def load_data():
         return pd.read_csv(SHEET_URL)
     except Exception as e:
         st.error(f"구글 시트를 불러오는데 실패했습니다: {e}")
+        return None
+
+
+@st.cache_data(ttl=600)
+def load_consultant_data():
+    try:
+        return pd.read_csv(CONSULTANT_SHEET_URL)
+    except Exception as e:
+        st.warning(f"컨설턴트 시트를 불러오는데 실패했습니다: {e}")
         return None
 
 
@@ -132,6 +147,51 @@ if df_raw is not None:
         dept_hex_map = {}
         df_valid["color"] = [[100, 100, 100, 220]] * len(df_valid)
 
+    # 대리점 시트와 컨설턴트 시트를 대리점명 기준으로 매칭
+    df_consultant_raw = load_consultant_data()
+
+    unique_consultants = []
+    unmatched_in_dealer_sheet = []      # 컨설턴트 시트에는 있는데 대리점 시트에서 못 찾은 이름
+    unmatched_in_consultant_sheet = []  # 대리점 시트에는 있는데 컨설턴트 시트에서 못 찾은 이름
+    duplicate_assignments = []          # 같은 대리점이 컨설턴트 2명 이상에게 배정된 경우
+
+    if df_consultant_raw is not None and "대리점명" in df_valid.columns:
+        df_consultant_raw.columns = df_consultant_raw.columns.astype(str).str.strip()
+
+        # 컨설턴트별로 세로 나열된 "가로형" 시트를 (컨설턴트, 대리점명) 세로 목록으로 펼침
+        consultant_long = (
+            df_consultant_raw.melt(var_name="컨설턴트", value_name="대리점명")
+            .dropna(subset=["대리점명"])
+        )
+        consultant_long["대리점명"] = consultant_long["대리점명"].astype(str).str.strip()
+        consultant_long["컨설턴트"] = consultant_long["컨설턴트"].astype(str).str.strip()
+        consultant_long = consultant_long[
+            (consultant_long["대리점명"] != "")
+            & (~consultant_long["컨설턴트"].str.startswith("Unnamed"))
+        ]
+
+        dealer_to_consultants = consultant_long.groupby("대리점명")["컨설턴트"].apply(list).to_dict()
+
+        duplicate_assignments = [
+            (dealer, sorted(set(names)))
+            for dealer, names in dealer_to_consultants.items()
+            if len(set(names)) > 1
+        ]
+
+        dealer_names_in_store_sheet = set(df_valid["대리점명"].astype(str).str.strip())
+        dealer_names_in_consultant_sheet = set(dealer_to_consultants.keys())
+        unmatched_in_dealer_sheet = sorted(dealer_names_in_consultant_sheet - dealer_names_in_store_sheet)
+        unmatched_in_consultant_sheet = sorted(dealer_names_in_store_sheet - dealer_names_in_consultant_sheet)
+
+        df_valid["담당컨설턴트"] = (
+            df_valid["대리점명"].astype(str).str.strip()
+            .map(lambda name: ", ".join(dict.fromkeys(dealer_to_consultants.get(name, []))))
+        )
+        df_valid.loc[df_valid["담당컨설턴트"] == "", "담당컨설턴트"] = "미지정"
+        unique_consultants = sorted(consultant_long["컨설턴트"].unique())
+    else:
+        df_valid["담당컨설턴트"] = "미지정"
+
     # 0-1. 지사별 통계 요약 (검색/필터와 무관하게 전체 데이터 기준)
     # streamlit-shadcn-ui의 카드형 metric_card 사용 (shadcn/ui 스타일)
     st.subheader("📊 전체 현황")
@@ -197,11 +257,36 @@ if df_raw is not None:
     else:
         selected_depts = []
 
-    if selected_depts and "부서" in df_valid.columns:
-        df_dept_base = df_valid[df_valid["부서"].isin(selected_depts)]
-        st.caption(f"📍 선택된 지사({', '.join(selected_depts)})만 표시 중 — 총 {len(df_dept_base)}건")
+    # 0-3. 담당 컨설턴트 토글 버튼 (지사 버튼과 동일한 방식 — 클릭하면 해당
+    # 컨설턴트가 담당하는 대리점만 표시, 다시 클릭하면 해제)
+    if unique_consultants:
+        selected_consultants = ui.toggle_group(
+            options=unique_consultants,
+            value=[],
+            selection_mode="multiple",
+            label="👤 담당 컨설턴트 (클릭하면 해당 컨설턴트가 담당하는 대리점만 표시됩니다 · 여러 명 선택 가능)",
+            key="consultant_toggle_group",
+        ) or []
     else:
-        df_dept_base = df_valid
+        selected_consultants = []
+
+    # 지사 선택 + 컨설턴트 선택은 둘 다 지정된 경우에만 표시(AND)되도록 결합
+    df_dept_base = df_valid
+    if selected_depts and "부서" in df_valid.columns:
+        df_dept_base = df_dept_base[df_dept_base["부서"].isin(selected_depts)]
+    if selected_consultants:
+        mask = df_dept_base["담당컨설턴트"].apply(
+            lambda v: any(c in [x.strip() for x in v.split(",")] for c in selected_consultants)
+        )
+        df_dept_base = df_dept_base[mask]
+
+    active_filters = []
+    if selected_depts:
+        active_filters.append(f"지사({', '.join(selected_depts)})")
+    if selected_consultants:
+        active_filters.append(f"컨설턴트({', '.join(selected_consultants)})")
+    if active_filters:
+        st.caption(f"📍 {' · '.join(active_filters)} 조건으로 표시 중 — 총 {len(df_dept_base)}건")
 
     # 1. 검색 기능
     search_query = st.text_input("🔍 검색어 입력 (대리점명, 센터, 부서, 주소, 대표자명 등)", "")
@@ -220,6 +305,25 @@ if df_raw is not None:
             st.caption("위도는 33~39, 경도는 124~132 범위를 벗어나거나 숫자로 변환할 수 없는 값입니다. 원본 시트 값을 확인해주세요.")
             invalid_preview_cols = [c for c in df_invalid.columns if c not in ["lat", "lon", "color"]]
             st.dataframe(df_invalid[invalid_preview_cols], use_container_width=True)
+
+    # 대리점 시트 <-> 컨설턴트 시트 매칭 불일치 확인
+    mismatch_total = len(unmatched_in_dealer_sheet) + len(unmatched_in_consultant_sheet) + len(duplicate_assignments)
+    if mismatch_total > 0:
+        with st.expander(f"⚠️ 대리점-컨설턴트 매칭 불일치 {mismatch_total}건 확인"):
+            if unmatched_in_consultant_sheet:
+                st.markdown(f"**컨설턴트가 지정되지 않은 대리점 ({len(unmatched_in_consultant_sheet)}건)**")
+                st.caption("대리점 시트에는 있지만, 컨설턴트 시트 어느 컬럼에도 이 대리점명이 없습니다.")
+                st.dataframe(pd.DataFrame({"대리점명": unmatched_in_consultant_sheet}), use_container_width=True)
+            if unmatched_in_dealer_sheet:
+                st.markdown(f"**대리점 시트에서 찾을 수 없는 이름 ({len(unmatched_in_dealer_sheet)}건, 오타 의심)**")
+                st.caption("컨설턴트 시트에는 있지만, 대리점 시트의 '대리점명'과 정확히 일치하지 않습니다.")
+                st.dataframe(pd.DataFrame({"대리점명": unmatched_in_dealer_sheet}), use_container_width=True)
+            if duplicate_assignments:
+                st.markdown(f"**컨설턴트가 2명 이상 겹쳐서 배정된 대리점 ({len(duplicate_assignments)}건)**")
+                st.dataframe(
+                    pd.DataFrame([{"대리점명": d, "컨설턴트": ", ".join(names)} for d, names in duplicate_assignments]),
+                    use_container_width=True,
+                )
 
     # 2. 지도 출력 영역
     st.subheader("🗺️ 대리점 위치 지도")
@@ -275,7 +379,8 @@ if df_raw is not None:
                     "<b style='font-size: 14px; color: #1E293B;'>{대리점명}</b><hr style='margin: 4px 0; border: 0.5px solid #E2E8F0;'/>"
                     "<b>부서:</b> {부서}<br/>"
                     "<b>주소:</b> {주소}<br/>"
-                    "<b>대표자:</b> {대표자명} ({전화번호})"
+                    "<b>대표자:</b> {대표자명} ({전화번호})<br/>"
+                    "<b>담당 컨설턴트:</b> {담당컨설턴트}"
                     "</div>",
             "style": {
                 "backgroundColor": "#FFFFFF",
