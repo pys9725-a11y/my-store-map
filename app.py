@@ -521,9 +521,14 @@ if df_raw is not None:
         # key를 넣지 않으면 브라우저에 이미 떠 있는 지도 컴포넌트가 코드에서 바뀐
         # initial_view_state(줌/중심 좌표)를 무시하고 예전 뷰 상태를 그대로 유지하는
         # 경우가 있어, 표시 중인 데이터가 바뀔 때마다(줌/중심 좌표가 달라질 때마다)
-        # key도 함께 바꿔서 지도를 강제로 새로 그리도록 함
+        # key도 함께 바꿔서 지도를 강제로 새로 그리도록 함.
+        # 건수/좌표/줌이 그대로여도 겹친 마커 중 "어떤 게 위로 그려지는지"(순서)만
+        # 바뀌는 경우가 있어(같은 주소 지사 대표 마커 등), 마커 순서도 key에 포함시킴
         map_layers = [layer] + ([office_layer] if office_layer is not None else [])
         office_count = len(df_office_display) if df_office_display is not None else 0
+        office_order_signature = (
+            "-".join(df_office_display["지사명"].astype(str)) if df_office_display is not None else ""
+        )
         st.pydeck_chart(
             pdk.Deck(
                 layers=map_layers,
@@ -533,7 +538,7 @@ if df_raw is not None:
             ),
             height=600,
             use_container_width=True,
-            key=f"store_map_{view_latitude:.4f}_{view_longitude:.4f}_{view_zoom:.2f}_{len(df_display)}_{office_count}",
+            key=f"store_map_{view_latitude:.4f}_{view_longitude:.4f}_{view_zoom:.2f}_{len(df_display)}_{office_count}_{office_order_signature}",
         )
         if office_layer is not None:
             st.caption("⬜ 흰색 테두리 마커 = 지사 사무실 위치")
