@@ -274,26 +274,24 @@ if df_raw is not None:
         # 좌표에 마커를 1개만 남기고(중복 제거) 지정한 대표 지사명을 사용.
         # (특정 지사를 선택하면 df_office 전체에서 그 지사만 걸러서 보여주므로
         # 대표가 아닌 지사도 개별 선택 시에는 정상적으로 나타남)
+        # (주의: groupby().apply()는 pandas 3.0부터 그룹 기준으로 쓰인 lat/lon
+        # 컬럼을 결과에서 제외해버려 좌표가 없어지는 문제가 있어 사용하지 않음.
+        # 대신 대표 지사가 먼저 오도록 정렬한 뒤 drop_duplicates로 중복 제거)
         OFFICE_REPRESENTATIVE_GROUPS = [
             (["서울북부지사", "서울남부지사", "CS본부", "인천지사", "경기지사"], "CS본부"),
             (["부산지사", "경남지사"], "부산지사"),
         ]
-        representative_by_name = {}
+        office_priority = {}
         for members, representative in OFFICE_REPRESENTATIVE_GROUPS:
             for member in members:
-                representative_by_name[member] = representative
+                office_priority[member] = 0 if member == representative else 1
 
-        def _pick_representative_row(group: pd.DataFrame) -> pd.Series:
-            names = set(group["지사명"])
-            for name in group["지사명"]:
-                rep = representative_by_name.get(name)
-                if rep in names:
-                    return group[group["지사명"] == rep].iloc[0]
-            return group.iloc[0]
-
+        df_office_sorted = df_office.assign(
+            _priority=df_office["지사명"].map(office_priority).fillna(0)
+        ).sort_values("_priority", kind="mergesort")
         df_office_dedup = (
-            df_office.groupby(["lat", "lon"], sort=False, group_keys=False)
-            .apply(_pick_representative_row)
+            df_office_sorted.drop_duplicates(subset=["lat", "lon"], keep="first")
+            .drop(columns=["_priority"])
             .reset_index(drop=True)
         )
     else:
