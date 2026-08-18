@@ -169,6 +169,13 @@ if df_raw is not None:
     if df_consultant_raw is not None and "대리점명" in df_valid.columns:
         df_consultant_raw.columns = df_consultant_raw.columns.astype(str).str.strip()
 
+        # 시트에 같은 컨설턴트 이름의 컬럼이 여러 번 나오면(예: 담당 대리점이
+        # 많아서 컬럼을 나눠 적은 경우), 구글시트 CSV를 읽을 때 pandas가
+        # "고화주", "고화주.1" 처럼 자동으로 이름을 바꿔서 서로 다른 사람으로
+        # 인식해버리므로, 그 자동 접미사(.1, .2 ...)를 떼어내 다시 같은
+        # 이름으로 되돌려서 같은 컨설턴트로 합쳐지도록 함
+        df_consultant_raw.columns = df_consultant_raw.columns.str.replace(r"\.\d+$", "", regex=True)
+
         # 컬럼 헤더가 정확히 "컨설턴트"인 경우는 실제 담당자 이름이 아니라
         # 레이블/참고용 컬럼일 가능성이 높으므로 매칭 대상에서 제외
         df_consultant_raw = df_consultant_raw.loc[:, df_consultant_raw.columns != "컨설턴트"]
