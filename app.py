@@ -26,6 +26,54 @@ st.markdown(
             display: none !important;
         }
 
+        /* 2. 전체 배경 - 은은한 보라~핑크 그라데이션 */
+        .stApp {
+            background: linear-gradient(180deg, #F5F3FF 0%, #FDF2F8 60%, #FFF7ED 100%);
+        }
+
+        /* 3. 히어로 배너 - 타이틀을 감싸는 진한 그라데이션 카드 */
+        .hero-banner {
+            background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 45%, #EC4899 100%);
+            border-radius: 20px;
+            padding: 32px 40px;
+            margin-bottom: 20px;
+            box-shadow: 0 20px 40px -12px rgba(99, 102, 241, 0.45);
+        }
+        .hero-banner h1 {
+            color: #FFFFFF;
+            font-size: 32px;
+            font-weight: 800;
+            margin: 0;
+        }
+        .hero-banner p {
+            color: rgba(255, 255, 255, 0.88);
+            margin: 6px 0 0 0;
+            font-size: 14px;
+        }
+
+        /* 4. 통계 카드 - 글래스모피즘(반투명 + 블러) */
+        div[data-testid="stMetric"] {
+            background: rgba(255, 255, 255, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 16px;
+            padding: 4px 8px;
+            box-shadow: 0 10px 28px -10px rgba(99, 102, 241, 0.35);
+        }
+
+        /* 5. 섹션 제목에 그라데이션 포인트 */
+        h2, h3 {
+            color: #4C1D95 !important;
+        }
+
+        /* 6. 데이터 표/차트를 감싸는 카드형 컨테이너 느낌 */
+        div[data-testid="stDataFrame"], div[data-testid="stExpander"] {
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 8px 20px -12px rgba(99, 102, 241, 0.3);
+        }
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -33,7 +81,15 @@ st.markdown(
 
 
 st.set_page_config(page_title="전국 대리점 위치 현황", layout="wide")
-st.title("📍 전국 대리점 위치 현황")
+st.markdown(
+    """
+    <div class="hero-banner">
+        <h1>📍 전국 대리점 위치 현황</h1>
+        <p>전국 대리점 · 지사 사무실 · 담당 컨설턴트를 한눈에 확인하세요</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 SHEET_ID = "1o-FqwhkRsmUN5aH4ook5T7kQ_RAq6zSg6VV1Jymqi8E"
 SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv"
@@ -298,13 +354,12 @@ if df_raw is not None:
         df_office_dedup = None
 
     # 0-1. 지사별 통계 요약 (검색/필터와 무관하게 전체 데이터 기준)
-    # streamlit-shadcn-ui의 카드형 metric_card 사용 (shadcn/ui 스타일)
+    # st.metric + 글래스모피즘 CSS 사용 (shadcn 컴포넌트는 iframe 안에서 렌더링돼
+    # 페이지 CSS가 닿지 않아, 커스텀 스타일을 온전히 입힐 수 있는 기본 위젯으로 표시)
     st.subheader("📊 전체 현황")
     summary_col1, summary_col2 = st.columns(2)
-    with summary_col1:
-        ui.metric_card(label="총 대리점 수", value=f"{len(df_valid):,}개", description="전체 등록 기준")
-    with summary_col2:
-        ui.metric_card(label="총 지사 수", value=f"{len(unique_depts):,}개", description="운영 중인 지사")
+    summary_col1.metric("총 대리점 수", f"{len(df_valid):,}개", help="전체 등록 기준")
+    summary_col2.metric("총 지사 수", f"{len(unique_depts):,}개", help="운영 중인 지사")
 
     if len(unique_depts) > 0:
         dept_counts_df = (
@@ -319,7 +374,7 @@ if df_raw is not None:
         # 켜져 있어 스크롤이 끝없이 되므로, Altair로 직접 그려서 0~40으로 고정하고
         # 확대/이동은 끈다 (.interactive() 호출하지 않음)
         # 세로 막대 + 지도 마커와 동일한 지사별 색상 적용
-        dept_bar = alt.Chart(dept_counts_df).mark_bar().encode(
+        dept_bar = alt.Chart(dept_counts_df).mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6).encode(
             x=alt.X("지사:N", sort=list(unique_depts), title=None, axis=alt.Axis(labelAngle=-40)),
             y=alt.Y("대리점 수:Q", scale=alt.Scale(domain=[0, 40], clamp=True), title="대리점 수"),
             color=alt.Color(

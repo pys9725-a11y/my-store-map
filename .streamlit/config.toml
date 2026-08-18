@@ -1,5 +1,6 @@
 [theme]
 base = "light"
 # Streamlit 기본 accent color는 빨간색(#FF4B4B)이라 멀티셀렉트 선택 태그 등
-# 여러 위젯의 강조색이 자극적인 빨간색으로 나타남 -> 차분한 블루로 변경
-primaryColor = "#2563EB"
+# 여러 위젯의 강조색이 자극적인 빨간색으로 나타남 -> 차분한 색으로 변경.
+# 그라데이션 히어로 배너(보라~핑크) 톤에 맞춰 바이올렛으로 조정
+primaryColor = "#7C3AED"
