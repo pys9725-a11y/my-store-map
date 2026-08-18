@@ -6,7 +6,6 @@ import altair as alt
 import streamlit as st
 import pandas as pd
 import pydeck as pdk
-import streamlit_shadcn_ui as ui
 
 
 st.markdown(
@@ -26,18 +25,18 @@ st.markdown(
             display: none !important;
         }
 
-        /* 2. 전체 배경 - 은은한 보라~핑크 그라데이션 */
+        /* 2. 전체 배경 - 은은한 그레이 톤 (핑크 대신 중립 톤으로 조정) */
         .stApp {
-            background: linear-gradient(180deg, #F5F3FF 0%, #FDF2F8 60%, #FFF7ED 100%);
+            background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);
         }
 
-        /* 3. 히어로 배너 - 타이틀을 감싸는 진한 그라데이션 카드 */
+        /* 3. 히어로 배너 - 타이틀을 감싸는 진한 그라데이션 카드 (화려한 포인트는 유지) */
         .hero-banner {
             background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 45%, #EC4899 100%);
             border-radius: 20px;
-            padding: 32px 40px;
+            padding: 28px 40px;
             margin-bottom: 20px;
-            box-shadow: 0 20px 40px -12px rgba(99, 102, 241, 0.45);
+            box-shadow: 0 20px 40px -12px rgba(51, 65, 85, 0.35);
         }
         .hero-banner h1 {
             color: #FFFFFF;
@@ -51,27 +50,47 @@ st.markdown(
             font-size: 14px;
         }
 
-        /* 4. 통계 카드 - 글래스모피즘(반투명 + 블러) */
+        /* 4. 통계 카드 - 글래스모피즘(반투명 + 블러), 내용에 맞춰 여백 축소 */
         div[data-testid="stMetric"] {
-            background: rgba(255, 255, 255, 0.65);
+            background: rgba(255, 255, 255, 0.75);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.6);
-            border-radius: 16px;
-            padding: 4px 8px;
-            box-shadow: 0 10px 28px -10px rgba(99, 102, 241, 0.35);
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            border-radius: 14px;
+            padding: 10px 16px;
+            box-shadow: 0 6px 16px -8px rgba(51, 65, 85, 0.25);
         }
 
-        /* 5. 섹션 제목에 그라데이션 포인트 */
+        /* 5. 섹션 제목 - 그레이 톤 */
         h2, h3 {
-            color: #4C1D95 !important;
+            color: #1E293B !important;
         }
 
         /* 6. 데이터 표/차트를 감싸는 카드형 컨테이너 느낌 */
         div[data-testid="stDataFrame"], div[data-testid="stExpander"] {
             border-radius: 14px;
             overflow: hidden;
-            box-shadow: 0 8px 20px -12px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 6px 16px -10px rgba(51, 65, 85, 0.25);
+        }
+
+        /* 7. 지사/컨설턴트 선택 토글 버튼(st.pills) - 배경과 구분되도록
+           연회색 채움 + 그림자, 선택 시 테마색으로 강조 */
+        div[data-testid="stButtonGroup"] button {
+            background-color: #F1F5F9 !important;
+            border: 1px solid #E2E8F0 !important;
+            box-shadow: 0 2px 6px -2px rgba(51, 65, 85, 0.25);
+        }
+        div[data-testid="stButtonGroup"] button:hover {
+            background-color: #E2E8F0 !important;
+            box-shadow: 0 4px 10px -3px rgba(51, 65, 85, 0.3);
+        }
+        div[data-testid="stButtonGroup"] button[aria-pressed="true"] {
+            background-color: #7C3AED !important;
+            border-color: #7C3AED !important;
+            box-shadow: 0 4px 12px -3px rgba(124, 58, 237, 0.5);
+        }
+        div[data-testid="stButtonGroup"] button[aria-pressed="true"] p {
+            color: #FFFFFF !important;
         }
 
 </style>
@@ -395,13 +414,14 @@ if df_raw is not None:
 
     # 0-2. 지도 색상 토글 버튼 (지사를 클릭하면 해당 지사만 지도에 표시,
     # 다시 클릭해서 선택 해제하면 원래 크기의 전체 지도로 돌아감)
-    # streamlit-shadcn-ui의 toggle_group(selection_mode="multiple")으로 다중 선택 지원
+    # st.pills 사용 (네이티브 위젯이라 페이지 CSS로 배경/그림자 커스터마이징 가능;
+    # shadcn ui.toggle_group은 iframe 안에서 렌더링돼 커스텀 CSS가 닿지 않음)
     if len(unique_depts) > 0:
-        selected_depts = ui.toggle_group(
+        selected_depts = st.pills(
+            "🗺️ 지도 색상 (지사를 클릭하면 해당 지사만 지도에 표시됩니다 · 여러 개 선택 가능, 선택 해제 시 전체 지도로 복귀)",
             options=list(unique_depts),
-            value=[],
-            selection_mode="multiple",
-            label="🗺️ 지도 색상 (지사를 클릭하면 해당 지사만 지도에 표시됩니다 · 여러 개 선택 가능, 선택 해제 시 전체 지도로 복귀)",
+            selection_mode="multi",
+            default=[],
             key="dept_toggle_group",
         ) or []
 
@@ -420,11 +440,11 @@ if df_raw is not None:
     # 0-3. 담당 컨설턴트 토글 버튼 (지사 버튼과 동일한 방식 — 클릭하면 해당
     # 컨설턴트가 담당하는 대리점만 표시, 다시 클릭하면 해제)
     if unique_consultants:
-        selected_consultants = ui.toggle_group(
+        selected_consultants = st.pills(
+            "👤 담당 컨설턴트 (클릭하면 해당 컨설턴트가 담당하는 대리점만 표시됩니다 · 여러 명 선택 가능)",
             options=unique_consultants,
-            value=[],
-            selection_mode="multiple",
-            label="👤 담당 컨설턴트 (클릭하면 해당 컨설턴트가 담당하는 대리점만 표시됩니다 · 여러 명 선택 가능)",
+            selection_mode="multi",
+            default=[],
             key="consultant_toggle_group",
         ) or []
     else:
