@@ -268,20 +268,36 @@ if df_raw is not None:
             df_office["lat"].between(*LAT_RANGE) & df_office["lon"].between(*LON_RANGE)
         ]
 
-        # 여러 지사가 같은 주소(사무실)를 공유해 지도에서 마커가 겹칠 때,
-        # 마우스 오버 시 어떤 지사명이 대표로 보일지 지정.
-        # (지도는 배열상 나중에 그려지는 마커가 위로 올라오므로, 대표로 지정한
-        # 지사를 해당 그룹 안에서 맨 뒤로 정렬해 항상 위에 표시되게 함)
+        # 여러 지사가 같은 주소(사무실)를 공유해 지도에서 마커가 겹치는 경우,
+        # "그려지는 순서"로 대표를 제어하는 방식은 브라우저/렌더링 방식에 따라
+        # 신뢰할 수 없으므로 사용하지 않음. 대신 지사 필터가 없을 때는 같은
+        # 좌표에 마커를 1개만 남기고(중복 제거) 지정한 대표 지사명을 사용.
+        # (특정 지사를 선택하면 df_office 전체에서 그 지사만 걸러서 보여주므로
+        # 대표가 아닌 지사도 개별 선택 시에는 정상적으로 나타남)
         OFFICE_REPRESENTATIVE_GROUPS = [
             (["서울북부지사", "서울남부지사", "CS본부", "인천지사", "경기지사"], "CS본부"),
             (["부산지사", "경남지사"], "부산지사"),
         ]
-        office_priority = {}
+        representative_by_name = {}
         for members, representative in OFFICE_REPRESENTATIVE_GROUPS:
             for member in members:
-                office_priority[member] = 1 if member == representative else 0
-        df_office["_priority"] = df_office["지사명"].map(office_priority).fillna(0)
-        df_office = df_office.sort_values("_priority", kind="mergesort").drop(columns=["_priority"])
+                representative_by_name[member] = representative
+
+        def _pick_representative_row(group: pd.DataFrame) -> pd.Series:
+            names = set(group["지사명"])
+            for name in group["지사명"]:
+                rep = representative_by_name.get(name)
+                if rep in names:
+                    return group[group["지사명"] == rep].iloc[0]
+            return group.iloc[0]
+
+        df_office_dedup = (
+            df_office.groupby(["lat", "lon"], sort=False, group_keys=False)
+            .apply(_pick_representative_row)
+            .reset_index(drop=True)
+        )
+    else:
+        df_office_dedup = None
 
     # 0-1. 지사별 통계 요약 (검색/필터와 무관하게 전체 데이터 기준)
     # streamlit-shadcn-ui의 카드형 metric_card 사용 (shadcn/ui 스타일)
@@ -379,11 +395,14 @@ if df_raw is not None:
     if active_filters:
         st.caption(f"📍 {' · '.join(active_filters)} 조건으로 표시 중 — 총 {len(df_dept_base)}건")
 
-    # 지사 사무실 위치도 선택된 지사가 있으면 그 지사만 표시 (컨설턴트/검색과는 무관)
+    # 지사 사무실 위치도 선택된 지사가 있으면 그 지사만 표시 (컨설턴트/검색과는 무관).
+    # 필터가 없을 때는 같은 좌표에 중복 제거된 df_office_dedup(대표 지사명만
+    # 남은 버전)을 사용하고, 특정 지사를 선택하면 df_office 전체에서 걸러
+    # 대표가 아닌 지사도 개별적으로 볼 수 있게 함
     if df_office is not None and selected_depts:
         df_office_display = df_office[df_office["지사명"].isin(selected_depts)]
     else:
-        df_office_display = df_office
+        df_office_display = df_office_dedup
 
     # 1. 검색 기능
     search_query = st.text_input("🔍 검색어 입력 (대리점명, 센터, 부서, 주소, 대표자명 등)", "")
