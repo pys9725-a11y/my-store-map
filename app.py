@@ -214,6 +214,20 @@ if df_raw is not None:
     else:
         df_valid["담당컨설턴트"] = "미지정"
 
+    # 대리점 시트에 원래부터 있던 '담당' 컬럼과 새로 계산한 '담당컨설턴트'가
+    # 같은 정보라 목록 표에 중복으로 나타나므로 하나로 합침.
+    # 계산된 값(컨설턴트 시트 매칭 결과)을 우선 쓰고, 매칭이 안 돼 '미지정'인
+    # 경우에만 원래 '담당' 컬럼 값으로 채운 뒤, 원래 컬럼은 표에서 제거.
+    if "담당" in df_valid.columns:
+        def _clean_value(v):
+            s = str(v).strip()
+            return "" if s.lower() in ("", "none", "nan", "nat") else s
+
+        fallback = df_valid["담당"].map(_clean_value)
+        needs_fallback = (df_valid["담당컨설턴트"] == "미지정") & (fallback != "")
+        df_valid.loc[needs_fallback, "담당컨설턴트"] = fallback[needs_fallback]
+        df_valid = df_valid.drop(columns=["담당"])
+
     # 0-1. 지사별 통계 요약 (검색/필터와 무관하게 전체 데이터 기준)
     # streamlit-shadcn-ui의 카드형 metric_card 사용 (shadcn/ui 스타일)
     st.subheader("📊 전체 현황")
