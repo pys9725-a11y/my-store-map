@@ -169,6 +169,10 @@ if df_raw is not None:
     if df_consultant_raw is not None and "대리점명" in df_valid.columns:
         df_consultant_raw.columns = df_consultant_raw.columns.astype(str).str.strip()
 
+        # 컬럼 헤더가 정확히 "컨설턴트"인 경우는 실제 담당자 이름이 아니라
+        # 레이블/참고용 컬럼일 가능성이 높으므로 매칭 대상에서 제외
+        df_consultant_raw = df_consultant_raw.loc[:, df_consultant_raw.columns != "컨설턴트"]
+
         # 컨설턴트별로 세로 나열된 "가로형" 시트를 (컨설턴트, 대리점명) 세로 목록으로 펼침
         consultant_long = (
             df_consultant_raw.melt(var_name="컨설턴트", value_name="대리점명")
