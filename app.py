@@ -44,6 +44,10 @@ SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=cs
 CONSULTANT_GID = "680750607"
 CONSULTANT_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={CONSULTANT_GID}"
 
+# 사업장 소재지 시트: 같은 문서의 다른 탭. A열=지사명, B열=주소, C열=위도, D열=경도
+OFFICE_GID = "2088938142"
+OFFICE_SHEET_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={OFFICE_GID}"
+
 # 한국 좌표 범위 (대략적인 육지 + 도서 지역 포함)
 LAT_RANGE = (33, 39)
 LON_RANGE = (124, 132)
@@ -68,6 +72,15 @@ def load_consultant_data():
         return pd.read_csv(CONSULTANT_SHEET_URL)
     except Exception as e:
         st.warning(f"컨설턴트 시트를 불러오는데 실패했습니다: {e}")
+        return None
+
+
+@st.cache_data(ttl=600)
+def load_office_data():
+    try:
+        return pd.read_csv(OFFICE_SHEET_URL)
+    except Exception as e:
+        st.warning(f"사업장 소재지 시트를 불러오는데 실패했습니다: {e}")
         return None
 
 
@@ -239,6 +252,22 @@ if df_raw is not None:
         df_valid.loc[needs_fallback, "담당컨설턴트"] = fallback[needs_fallback]
         df_valid = df_valid.drop(columns=["담당"])
 
+    # 사업장 소재지(지사 사무실 위치) 시트 — A:지사명, B:주소, C:위도, D:경도
+    df_office_raw = load_office_data()
+    df_office = None
+    if df_office_raw is not None and df_office_raw.shape[1] >= 4:
+        df_office = pd.DataFrame({
+            "지사명": df_office_raw.iloc[:, 0].astype(str).str.strip(),
+            "주소": df_office_raw.iloc[:, 1].astype(str).str.strip(),
+            "lat": parse_coord(df_office_raw.iloc[:, 2]),
+            "lon": parse_coord(df_office_raw.iloc[:, 3]),
+        })
+        df_office = df_office[df_office["지사명"] != ""]
+        df_office = df_office.dropna(subset=["lat", "lon"])
+        df_office = df_office[
+            df_office["lat"].between(*LAT_RANGE) & df_office["lon"].between(*LON_RANGE)
+        ]
+
     # 0-1. 지사별 통계 요약 (검색/필터와 무관하게 전체 데이터 기준)
     # streamlit-shadcn-ui의 카드형 metric_card 사용 (shadcn/ui 스타일)
     st.subheader("📊 전체 현황")
@@ -335,6 +364,12 @@ if df_raw is not None:
     if active_filters:
         st.caption(f"📍 {' · '.join(active_filters)} 조건으로 표시 중 — 총 {len(df_dept_base)}건")
 
+    # 지사 사무실 위치도 선택된 지사가 있으면 그 지사만 표시 (컨설턴트/검색과는 무관)
+    if df_office is not None and selected_depts:
+        df_office_display = df_office[df_office["지사명"].isin(selected_depts)]
+    else:
+        df_office_display = df_office
+
     # 1. 검색 기능
     search_query = st.text_input("🔍 검색어 입력 (대리점명, 센터, 부서, 주소, 대표자명 등)", "")
 
@@ -420,6 +455,32 @@ if df_raw is not None:
             auto_highlight=True,  # 마우스 오버 시 강조
         )
 
+        # 지사 사무실 위치: 대리점 마커(작은 채워진 원)와 구분되도록
+        # 흰색 채움 + 진한 테두리의 더 큰 원으로 표시
+        office_layer = None
+        if df_office_display is not None and not df_office_display.empty:
+            df_office_tooltip = df_office_display.rename(columns={"지사명": "대리점명"})
+            df_office_tooltip["부서"] = "🏢 지사 사무실"
+            df_office_tooltip["대표자명"] = "-"
+            df_office_tooltip["전화번호"] = "-"
+            df_office_tooltip["담당컨설턴트"] = "-"
+
+            office_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=df_office_tooltip,
+                get_position=["lon", "lat"],
+                get_fill_color=[255, 255, 255, 235],
+                get_line_color=[15, 23, 42, 255],
+                line_width_min_pixels=3,
+                stroked=True,
+                filled=True,
+                get_radius=320,
+                radius_min_pixels=11,
+                radius_max_pixels=22,
+                pickable=True,
+                auto_highlight=True,
+            )
+
         # 팝업 툴팁 (대표자명 옆 전화번호 반영)
         tooltip = {
             "html": "<div style='font-family: sans-serif; line-height: 1.5;'>"
@@ -446,17 +507,21 @@ if df_raw is not None:
         # initial_view_state(줌/중심 좌표)를 무시하고 예전 뷰 상태를 그대로 유지하는
         # 경우가 있어, 표시 중인 데이터가 바뀔 때마다(줌/중심 좌표가 달라질 때마다)
         # key도 함께 바꿔서 지도를 강제로 새로 그리도록 함
+        map_layers = [layer] + ([office_layer] if office_layer is not None else [])
+        office_count = len(df_office_display) if df_office_display is not None else 0
         st.pydeck_chart(
             pdk.Deck(
-                layers=[layer],
+                layers=map_layers,
                 initial_view_state=view_state,
                 map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
                 tooltip=tooltip
             ),
             height=600,
             use_container_width=True,
-            key=f"store_map_{view_latitude:.4f}_{view_longitude:.4f}_{view_zoom:.2f}_{len(df_display)}",
+            key=f"store_map_{view_latitude:.4f}_{view_longitude:.4f}_{view_zoom:.2f}_{len(df_display)}_{office_count}",
         )
+        if office_layer is not None:
+            st.caption("⬜ 흰색 테두리 마커 = 지사 사무실 위치")
     else:
         st.warning("표시할 수 있는 위치 데이터가 없거나, 구글 시트의 위도/경도 값이 올바르지 않습니다.")
 
