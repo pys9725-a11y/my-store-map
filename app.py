@@ -185,6 +185,14 @@ def parse_coord(series: pd.Series) -> pd.Series:
     return pd.to_numeric(cleaned, errors="coerce")
 
 
+# 구글 시트는 10분(ttl=600) 캐시로 불러오기 때문에, 시트를 방금 수정했다면
+# 최대 10분까지는 예전 데이터가 보일 수 있음. 바로 반영하고 싶을 때 누르는 버튼
+refresh_col, _ = st.columns([1, 5])
+with refresh_col:
+    if st.button("🔄 최신 데이터로 새로고침", help="구글 시트를 지금 다시 불러옵니다 (평소엔 10분마다 자동 갱신)"):
+        st.cache_data.clear()
+        st.rerun()
+
 df_raw = load_data()
 
 if df_raw is not None:
